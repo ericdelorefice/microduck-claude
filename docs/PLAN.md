@@ -387,14 +387,15 @@ mapped to motion + `robot.sound`. A local **long-term memory** (`memory/`): `rec
 safety prompt, chosen via `MICRODUCK_PERSONA`. Personal integrations still arrive via the plugin hook,
 never the core.
 
-### M-Audio — speak *through* the duck
-Make Claude's voice come out of the duck and its mic feed STT, behind a `DuckAudioOverSSH` backend
-(swappable with `HostAudio`). Near-term this rides the **SSH + `aplay`/`arecord`** path that already works
-on the board (§2.4): host-rendered TTS streamed to the speaker, the mic captured for STT, with the
-single-client "take turns with chirps" caveat and transient files under `/var/lib/robot`. The durable
-version builds the unbuilt **`mediad` WebRTC audio track** (Rust/GStreamer; medium–large) so audio flows
-over the same channel as video/control — a strong upstream contribution to Pollen. Host/credentials come
-from the environment; nothing committed.
+### M-Audio — speak *through* the duck ✅ (host scaffolding built; validate on hardware)
+Claude's voice can come out of the duck behind a swappable `TextToSpeech`: `SshDuckTTS`
+(`voice/ssh_audio.py`) renders TTS to a WAV on the host (macOS `say`) and plays it on the duck's speaker
+over SSH `aplay`; `SshDuckAudio.record_wav` captures the mic via `arecord` for a future STT. Selected with
+`MICRODUCK_VOICE_OUTPUT=duck` + `MICRODUCK_DUCK_SSH_HOST`. The command construction is unit-tested with
+injected runners; the real device name, SSH access, and the single-client "take turns with chirps" timing
+must be confirmed on a board (§2.4). Remaining: a real host STT engine over the captured mic audio, and
+the durable **`mediad` WebRTC audio track** (Rust/GStreamer) so audio flows over the same channel as
+video/control — a strong upstream contribution to Pollen. SSH auth is the user's own; nothing committed.
 
 ### Milestone 5 — Real hardware bring-up
 When hardware arrives (~Q1 2027): the same `RpcRobot` over SSH-forwarded socket or the rendezvous lane,

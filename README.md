@@ -33,8 +33,11 @@ project adds the conversational layer on top, in the style of Pollen's Reachy Mi
   Ollama) with `MICRODUCK_LLM_PROVIDER=openai`.
 - **Expression, memory & persona (done):** 23 gestures incl. emotions; a local long-term memory
   (`remember` / `recall` / `forget`, writes gated); and persona profiles (`MICRODUCK_PERSONA`).
-- **Next / roadmap:** speaking *through* the duck via SSH audio, and hardware bring-up — see
-  [`docs/PLAN.md`](docs/PLAN.md) §7.
+- **Speak through the duck (scaffolded):** `MICRODUCK_VOICE_OUTPUT=duck` renders TTS on the host and
+  plays it on the duck's speaker over SSH (`SshDuckTTS`); the command path is tested, pending validation
+  on a real board.
+- **Next / roadmap:** validate the SSH audio path + mic-in STT on hardware, and full hardware bring-up —
+  see [`docs/PLAN.md`](docs/PLAN.md) §7.
 
 ## Requirements
 
@@ -89,6 +92,9 @@ runs after you confirm it**.
 | `MICRODUCK_CLAUDE_MODEL` | `claude-opus-5-5` | (Legacy) Claude model; `MICRODUCK_MODEL` overrides it. |
 | `MICRODUCK_PERSONA` | `duckling` | Personality: `duckling`, `zen`, `scholar`, `grumpy`. |
 | `MICRODUCK_MEMORY_PATH` | `~/.microduck-claude/memory.json` | Where the duck stores what it remembers (local, never committed). |
+| `MICRODUCK_VOICE_OUTPUT` | `host` | `host` (Mac speaker) or `duck` (speak through the duck via SSH). |
+| `MICRODUCK_DUCK_SSH_HOST` | — | Duck's SSH host for `voice_output=duck` (auth via your own SSH keys). |
+| `MICRODUCK_DUCK_AUDIO_DEVICE` | `plughw:aic3104` | Duck ALSA device (`default` on the beta board). |
 | `MICRODUCK_CLAUDE_MAX_TOKENS` | `4096` | Max response tokens. |
 | `MICRODUCK_ROBOT_BACKEND` | `fake` | `fake` (in-process) or `rpc` (real duck-sim / robot). |
 | `MICRODUCK_ROBOT_SOCKET` | `~/.cache/duck-sim/duck-a.sock` | Unix socket for the `rpc` backend. |
