@@ -1,0 +1,149 @@
+"""RpcRobot — drive a real Microduck (or duck-sim) over the duck-ipc-proto contract.
+
+A drop-in for :class:`FakeRobot`: it satisfies :class:`RobotInterface`, so the
+expression layer, tools, and safety gate work against it unchanged. Continuous
+commands (move/head/pose/mouth/sound) are sent as JSON-RPC notifications;
+discrete ones (hello/do/look/policies/health) are requests. All method names and
+the request-vs-notification choice live in :mod:`.protocol` and are flagged there
+for confirmation against the live contract.
+"""
+
+from __future__ import annotations
+
+import logging
+from typing import Any
+
+from . import protocol as p
+from .interface import SOUND_TAGS
+from .transport import JsonRpcError, UnixSocketTransport
+
+log = logging.getLogger("microduck_claude.robot.rpc")
+
+BATTERY_UNKNOWN = -1.0
+
+
+class RpcRobot:
+    """A :class:`RobotInterface` backed by a JSON-RPC transport."""
+
+    def __init__(
+        self,
+        transport: UnixSocketTransport,
+        *,
+        api_version: int = p.API_VERSION,
+        subscribe_hz: float = 2.0,
+    ) -> None:
+        self._t = transport
+        self._api_version = api_version
+        self._subscribe_hz = subscribe_hz
+
+    def handshake(self) -> dict[str, Any] | None:
+        """Perform the ``hello`` handshake and start a state subscription."""
+        result = self._t.request(p.HELLO, {"api_version": self._api_version})
+        if self._subscribe_hz:
+            # robot.subscribe is a request; hz is an integer (frames arrive as
+            # robot.state notifications thereafter).
+            self._t.request(p.ROBOT_SUBSCRIBE, {"hz": int(self._subscribe_hz)})
+        return result if isinstance(result, dict) else None
+
+    def close(self) -> None:
+        self._t.close()
+
+    # -- intents ---------------------------------------------------------------
+
+    def do_behavior(self, skill: str) -> bool:
+        result = self._t.request(p.ROBOT_DO, {"skill": skill})
+        return bool(result.get("accepted", False)) if isinstance(result, dict) else False
+
+    def drive(self, vx: float, vy: float, vyaw: float) -> None:
+        self._t.notify(p.ROBOT_MOVE, {"vx": vx, "vy": vy, "vyaw": vyaw})
+
+    def stop(self) -> None:
+        self._t.request(p.ROBOT_STOP)
+
+    def set_head(
+        self,
+        *,
+        neck_pitch: float = 0.0,
+        head_pitch: float = 0.0,
+        head_yaw: float = 0.0,
+        head_roll: float = 0.0,
+    ) -> None:
+        self._t.notify(
+            p.ROBOT_HEAD,
+            {
+                "neck_pitch": neck_pitch,
+                "head_pitch": head_pitch,
+                "head_yaw": head_yaw,
+                "head_roll": head_roll,
+            },
+        )
+
+    def look_at(self, x: float, y: float, z: float, *, neck_pitch: float = 0.0) -> None:
+        self._t.request(p.ROBOT_LOOK, {"x": x, "y": y, "z": z, "neck_pitch": neck_pitch})
+
+    def set_pose(
+        self,
+        *,
+        z: float = 0.0,
+        roll: float = 0.0,
+        pitch: float = 0.0,
+        active: bool = True,
+    ) -> None:
+        self._t.notify(p.ROBOT_POSE, {"z": z, "roll": roll, "pitch": pitch, "active": active})
+
+    def set_mouth(self, open_fraction: float) -> None:
+        if not 0.0 <= open_fraction <= 1.0:
+            raise ValueError("open_fraction must be within [0.0, 1.0]")
+        self._t.notify(p.ROBOT_MOUTH, {"open": open_fraction})
+
+    def play_sound(self, tag: str) -> None:
+        if tag not in SOUND_TAGS:
+            raise ValueError(f"unknown sound tag {tag!r}; valid: {', '.join(SOUND_TAGS)}")
+        self._t.request(p.ROBOT_SOUND, {"tag": tag})
+
+    # -- read-only -------------------------------------------------------------
+
+    def list_behaviors(self) -> list[str]:
+        return _extract_skills(self._t.request(p.ROBOT_POLICIES))
+
+    def get_state(self) -> dict[str, object]:
+        return self._t.latest_state() or {}
+
+    def get_battery(self) -> float:
+        """Battery level 0..1, or ``BATTERY_UNKNOWN`` (-1.0) if unavailable.
+
+        Battery is not in ``robot.state``; it comes from ``robot.health`` as
+        ``battery: {volts, percent}`` (``null`` means "not known yet", never 0).
+        """
+        try:
+            result = self._t.request(p.ROBOT_HEALTH)
+        except JsonRpcError:
+            log.warning("robot.health unavailable; battery unknown")
+            return BATTERY_UNKNOWN
+        if isinstance(result, dict):
+            battery = result.get("battery")
+            if isinstance(battery, dict):
+                percent = battery.get("percent")
+                if isinstance(percent, (int, float)):
+                    return float(percent) / 100.0
+        return BATTERY_UNKNOWN
+
+
+def _extract_skills(result: Any) -> list[str]:
+    """Defensively pull behaviour/skill names from a ``robot.policies`` result."""
+    names: list[str] = []
+    if isinstance(result, list):
+        return [item for item in result if isinstance(item, str)]
+    if isinstance(result, dict):
+        for key in ("skills", "behaviors", "slots"):
+            value = result.get(key)
+            if isinstance(value, list):
+                for item in value:
+                    if isinstance(item, str):
+                        names.append(item)
+                    elif isinstance(item, dict):
+                        name = item.get("skill") or item.get("name")
+                        if isinstance(name, str):
+                            names.append(name)
+                break
+    return names

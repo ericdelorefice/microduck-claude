@@ -7,7 +7,7 @@ import sys
 from .assembly import build_registry
 from .brain import SYSTEM_PROMPT, Brain, BrainConfig, MissingAPIKeyError, build_client
 from .config import Config
-from .robot import FakeRobot, RobotCall
+from .robot import FakeRobot, JsonRpcError, RobotCall, build_robot
 from .safety import Dispatcher
 
 
@@ -60,9 +60,6 @@ def main(argv: list[str] | None = None) -> int:
         return 2
 
     config = Config.from_env()
-    robot = FakeRobot()
-    registry = build_registry(robot)
-    dispatcher = Dispatcher(registry, ConsoleConfirmer())
 
     try:
         client = build_client()
@@ -70,6 +67,22 @@ def main(argv: list[str] | None = None) -> int:
         print(str(exc), file=sys.stderr)
         return 1
 
+    try:
+        robot = build_robot(
+            config.robot_backend,
+            socket_path=config.robot_socket,
+            api_version=config.api_version,
+        )
+    except (OSError, JsonRpcError) as exc:
+        print(
+            f"could not connect to the duck (backend={config.robot_backend}): {exc}",
+            file=sys.stderr,
+        )
+        return 1
+
+    fake = robot if isinstance(robot, FakeRobot) else None
+    registry = build_registry(robot)
+    dispatcher = Dispatcher(registry, ConsoleConfirmer())
     brain = Brain(
         client,
         registry,
@@ -78,29 +91,35 @@ def main(argv: list[str] | None = None) -> int:
         config=BrainConfig(model=config.model, max_tokens=config.max_tokens),
     )
 
-    print("🦆  Talk to your Microduck. Ctrl-D to quit.\n")
-    while True:
-        try:
-            user = input("you › ").strip()
-        except (EOFError, KeyboardInterrupt):
-            print()
-            break
-        if not user:
-            continue
+    print(f"🦆  Talk to your Microduck (backend={config.robot_backend}). Ctrl-D to quit.\n")
+    try:
+        while True:
+            try:
+                user = input("you › ").strip()
+            except (EOFError, KeyboardInterrupt):
+                print()
+                break
+            if not user:
+                continue
 
-        before = len(robot.calls)
-        try:
-            turn = brain.send(user)
-        except Exception as exc:  # keep the REPL alive on API/transport errors
-            print(f"(error talking to Claude: {exc})", file=sys.stderr)
-            continue
+            before = len(fake.calls) if fake is not None else 0
+            try:
+                turn = brain.send(user)
+            except Exception as exc:  # keep the REPL alive on API/transport errors
+                print(f"(error talking to Claude: {exc})", file=sys.stderr)
+                continue
 
-        for text in turn.texts:
-            print(f"duck › {text}")
-        if turn.refused and not turn.texts:
-            print("duck › (declined to respond)")
-        summary = _summarize(robot.calls[before:])
-        if summary:
-            print(f"      🦆 {summary}")
+            for text in turn.texts:
+                print(f"duck › {text}")
+            if turn.refused and not turn.texts:
+                print("duck › (declined to respond)")
+            if fake is not None:
+                summary = _summarize(fake.calls[before:])
+                if summary:
+                    print(f"      🦆 {summary}")
+    finally:
+        close = getattr(robot, "close", None)
+        if callable(close):
+            close()
 
     return 0
