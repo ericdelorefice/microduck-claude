@@ -16,8 +16,12 @@ from .safety import Dispatcher
 from .tools import ToolRegistry
 from .voice import (
     MacSayTTS,
+    MacSayWavRenderer,
     PrintTTS,
     SpeechReactor,
+    SshDuckAudio,
+    SshDuckTTS,
+    SshTarget,
     StdinSTT,
     TextToSpeech,
     VoiceConfirmer,
@@ -153,16 +157,25 @@ def _run_chat(
                 print(f"      🦆 {summary}")
 
 
+def _build_voice_tts(config: Config) -> tuple[TextToSpeech, str]:
+    """Pick the voice output: the Mac speaker, or (validate-on-hardware) the duck."""
+    if config.voice_output == "duck" and config.duck_ssh_host:
+        target = SshTarget(config.duck_ssh_host, config.duck_audio_device, config.duck_ssh_user)
+        return SshDuckTTS(MacSayWavRenderer(), SshDuckAudio(target)), f"duck@{config.duck_ssh_host}"
+    if MacSayTTS.available():
+        return MacSayTTS(), "say"
+    return PrintTTS(), "print"
+
+
 def _run_voice(
     llm: LLM, robot: RobotInterface, registry: ToolRegistry, system: str, config: Config
 ) -> None:
     stt = StdinSTT()
-    tts: TextToSpeech = MacSayTTS() if MacSayTTS.available() else PrintTTS()
+    tts, tts_kind = _build_voice_tts(config)
     dispatcher = Dispatcher(registry, VoiceConfirmer(stt, tts))
     brain = Brain(llm, registry, dispatcher, system=system)
     reactor = SpeechReactor(robot)
 
-    tts_kind = "say" if MacSayTTS.available() else "print"
     print(
         f"🦆  Voice mode (backend={config.robot_backend}, tts={tts_kind}, "
         f"model={config.model}, persona={config.persona}). Speak by typing a line; "
