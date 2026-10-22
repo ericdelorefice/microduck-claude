@@ -404,11 +404,12 @@ Ollama / llama.cpp, etc.) as **optional adapters behind extras** — the open co
 Tools, the safety gate, expressions, robot, and voice are already provider-agnostic, so only the brain
 changes. Claude stays the recommended default.
 
-### Milestone — Local playground / test console
-A local analog to Pollen's browser simulator: a small UI (web or TUI) that visualizes the duck's live
-state from the `FakeRobot` (head / beak / pose, current gesture, chirps) and lets you talk to it, so the
-whole experience — including the voice loop — can be developed, demoed, and personally tested **without
-hardware**. Builds on the existing `FakeRobot` call stream; optionally mirrors to a real `duck-sim`.
+### Milestone — Local playground / test console ✅ (built)
+`microduck-claude playground` serves a local web page (stdlib HTTP server, no new deps) that visualizes
+the `FakeRobot` live via an observer hook + a `DuckState` reducer (head / beak / pose, chirps, driving),
+with a chat box (actions confirmed in-browser via a `WebConfirmer` — same gate, only an explicit Allow
+counts) and gesture-preview buttons that need no API key. A hardware-free test area. Next: in-browser
+audio for the voice loop, and an optional mirror to a real `duck-sim`.
 
 ---
 
