@@ -10,6 +10,8 @@ from __future__ import annotations
 from dataclasses import dataclass, field
 from typing import Any
 
+from microduck_claude.voice.interfaces import Utterance
+
 
 @dataclass
 class FakeBlock:
@@ -76,3 +78,25 @@ class RecordingConfirmer:
     def confirm(self, prompt: str) -> bool:
         self.prompts.append(prompt)
         return self.answer
+
+
+class FakeSTT:
+    """A scripted speech recognizer: yields each line once, then stops (None)."""
+
+    def __init__(self, lines: list[str]) -> None:
+        self._lines = list(lines)
+
+    def listen(self) -> Utterance | None:
+        if not self._lines:
+            return None
+        return Utterance(self._lines.pop(0))
+
+
+class FakeTTS:
+    """Records spoken text instead of producing audio."""
+
+    def __init__(self) -> None:
+        self.spoken: list[str] = []
+
+    def speak(self, text: str) -> None:
+        self.spoken.append(text)
