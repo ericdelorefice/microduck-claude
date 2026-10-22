@@ -66,6 +66,13 @@ class DispatchResult:
             return self.result.content
         return "The tool could not be run."
 
+    @property
+    def image_for_model(self) -> bytes | None:
+        """An image to hand the model, only from a tool that actually executed."""
+        if self.outcome is Outcome.EXECUTED and self.result is not None:
+            return self.result.image_png
+        return None
+
 
 class Dispatcher:
     """Runs tool calls behind the safety gate."""

@@ -21,10 +21,15 @@ class Risk(enum.Enum):
 
 @dataclass
 class ToolResult:
-    """What a tool returns. ``content`` is text handed back to the model as data."""
+    """What a tool returns.
+
+    ``content`` is text handed back to the model as data. ``image_png`` is an optional
+    image (e.g. a camera frame) for a vision-capable model — text-only providers ignore it.
+    """
 
     content: str
     ok: bool = True
+    image_png: bytes | None = None
 
 
 class Tool(Protocol):

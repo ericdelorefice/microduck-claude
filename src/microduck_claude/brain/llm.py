@@ -30,6 +30,7 @@ class ToolResult:
     tool_call_id: str
     content: str
     is_error: bool = False
+    image_png: bytes | None = None
 
 
 @dataclass

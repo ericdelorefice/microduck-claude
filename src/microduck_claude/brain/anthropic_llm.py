@@ -7,6 +7,7 @@ tool use replays correctly.
 
 from __future__ import annotations
 
+import base64
 from typing import Any
 
 from .llm import LLMResponse, ToolCall, ToolResult
@@ -33,17 +34,29 @@ class AnthropicLLM:
         return self._complete()
 
     def send_tool_results(self, results: list[ToolResult]) -> LLMResponse:
-        content = [
-            {
-                "type": "tool_result",
-                "tool_use_id": r.tool_call_id,
-                "content": r.content,
-                "is_error": r.is_error,
-            }
-            for r in results
-        ]
+        content = [self._tool_result_block(r) for r in results]
         self._messages.append({"role": "user", "content": content})
         return self._complete()
+
+    @staticmethod
+    def _tool_result_block(result: ToolResult) -> dict[str, Any]:
+        block: dict[str, Any] = {
+            "type": "tool_result",
+            "tool_use_id": result.tool_call_id,
+            "content": result.content,
+            "is_error": result.is_error,
+        }
+        if result.image_png is not None:
+            # A vision tool (e.g. the camera) hands back an image block alongside the text.
+            encoded = base64.b64encode(result.image_png).decode("ascii")
+            block["content"] = [
+                {"type": "text", "text": result.content},
+                {
+                    "type": "image",
+                    "source": {"type": "base64", "media_type": "image/png", "data": encoded},
+                },
+            ]
+        return block
 
     def _complete(self) -> LLMResponse:
         response = self._client.messages.create(

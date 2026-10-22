@@ -20,6 +20,7 @@ def test_core_tools_registered() -> None:
         "get_time",
         "list_gestures",
         "get_robot_status",
+        "see",
         "perform_gesture",
     }
 

@@ -116,7 +116,9 @@ def _run(*, voice: bool) -> int:
     # Hold each gesture step briefly on a real body (the sim) so motion is visible;
     # the in-process FakeRobot stays instant.
     gesture_pace = 0.35 if config.robot_backend == "rpc" else 0.0
-    registry = build_registry(robot, memory=memory, gesture_pace=gesture_pace)
+    registry = build_registry(
+        robot, memory=memory, gesture_pace=gesture_pace, camera_url=config.camera_url
+    )
     system = system_prompt_for(config.persona)
     try:
         if voice:

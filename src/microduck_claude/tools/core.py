@@ -8,6 +8,8 @@ NOT here — they belong in a private tool provider (see plugins/), never the co
 from __future__ import annotations
 
 import json
+import urllib.error
+import urllib.request
 from datetime import datetime
 from typing import Any
 
@@ -28,11 +30,28 @@ _NO_ARGS_SCHEMA: dict[str, Any] = {
 }
 
 
-def build_core_tools(robot: RobotInterface, *, gesture_pace: float = 0.0) -> list[Tool]:
+def _capture_camera_png(url: str, *, timeout: float = 4.0) -> bytes | None:
+    """GET a single PNG frame from the duck's camera console, or None if unavailable."""
+    if not url:
+        return None
+    try:
+        with urllib.request.urlopen(url, timeout=timeout) as response:
+            if getattr(response, "status", 200) != 200:
+                return None
+            data: bytes = response.read()
+    except (urllib.error.URLError, OSError, ValueError):
+        return None
+    return data or None
+
+
+def build_core_tools(
+    robot: RobotInterface, *, gesture_pace: float = 0.0, camera_url: str = ""
+) -> list[Tool]:
     """Build the core tool set, bound to a particular robot.
 
-    ``gesture_pace`` holds each gesture step for that many seconds so motion is visible
-    on a real body; it defaults to 0 (instant) for the FakeRobot and tests.
+    ``gesture_pace`` holds each gesture step for that many seconds so motion is visible on
+    a real body; it defaults to 0 (instant) for the FakeRobot and tests. ``camera_url`` is
+    the duck's camera snapshot endpoint for the ``see`` tool (empty = no camera).
     """
 
     def _get_time(_: dict[str, Any]) -> ToolResult:
@@ -44,6 +63,16 @@ def build_core_tools(robot: RobotInterface, *, gesture_pace: float = 0.0) -> lis
 
     def _robot_status(_: dict[str, Any]) -> ToolResult:
         return ToolResult(json.dumps(robot.get_state(), default=str, sort_keys=True))
+
+    def _see(_: dict[str, Any]) -> ToolResult:
+        png = _capture_camera_png(camera_url)
+        if png is None:
+            return ToolResult(
+                "no camera is available right now (run the sim with a camera, e.g. "
+                "DUCK_SIM_CAMERAS=a, or check the duck's camera is streaming)",
+                ok=False,
+            )
+        return ToolResult("Here is what the duck's camera sees right now.", image_png=png)
 
     def _perform_gesture(arguments: dict[str, Any]) -> ToolResult:
         name = arguments.get("gesture")
@@ -98,6 +127,13 @@ def build_core_tools(robot: RobotInterface, *, gesture_pace: float = 0.0) -> lis
             Risk.READ_ONLY,
             _NO_ARGS_SCHEMA,
             _robot_status,
+        ),
+        FunctionTool(
+            "see",
+            "Look through the duck's own camera at what is in front of it right now.",
+            Risk.READ_ONLY,
+            _NO_ARGS_SCHEMA,
+            _see,
         ),
         FunctionTool(
             "perform_gesture",

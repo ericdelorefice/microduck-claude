@@ -30,6 +30,7 @@ def test_core_registry_has_no_plugin_tools() -> None:
         "get_time",
         "list_gestures",
         "get_robot_status",
+        "see",
         "perform_gesture",
     }
 
