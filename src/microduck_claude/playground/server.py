@@ -97,7 +97,10 @@ class PlaygroundApp:
     def say(self, text: str) -> dict[str, Any]:
         if self._brain is None:
             return {
-                "replies": ["Set ANTHROPIC_API_KEY and restart me to chat."],
+                "replies": [
+                    "No Anthropic credentials — run `ant auth login` "
+                    "or set ANTHROPIC_API_KEY, then restart me to chat."
+                ],
                 "refused": False,
             }
         turn = self._brain.send(text)

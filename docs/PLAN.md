@@ -193,9 +193,10 @@ coding session:
    plugin (§5.6), never in the open core.
 3. **Brain on host, body is remote.** Claude API + STT + TTS run on a Mac/server. The robot receives
    intents and returns state.
-4. **Official Anthropic SDK only.** Python `anthropic` SDK, model `claude-opus-5-5` (configurable),
-   adaptive thinking. The API key is read **only** from the `ANTHROPIC_API_KEY` environment variable the
-   owner sets — the code **never asks for it, never stores it, never logs it**.
+4. **Claude via the official Anthropic SDK by default.** Python `anthropic` SDK, model `claude-opus-5-5`
+   (configurable), adaptive thinking; other models only via the provider-neutral seam, never raw HTTP.
+   Credentials are read **only** from the owner's environment — an `ANTHROPIC_API_KEY` or an
+   `ant auth login` profile — and the code **never asks for them, never stores them, never logs them**.
 5. **Safety from day one** (§6): allow-listed tools, **spoken/explicit confirmation before any action**,
    **read-only by default**, and **everything the robot hears or reads is untrusted input** (prompt
    injection).
@@ -290,7 +291,8 @@ still subject to the core safety gate) **without the core importing it**. Core s
 has **zero** dependency on any. This is how the owner's private assistant plugs in later.
 
 ### 5.7 Config & secrets (`microduck_claude.config`)
-Env-first: `ANTHROPIC_API_KEY` (never stored/logged), `MICRODUCK_CLAUDE_MODEL` (default
+Env-first: Anthropic credentials (an `ANTHROPIC_API_KEY` or `ant auth login` profile; never
+stored/logged), `MICRODUCK_CLAUDE_MODEL` (default
 `claude-opus-5-5`), transport selection + target socket/robot, log level. Optional non-secret
 `config.toml`. `.gitignore` covers `.env`, local config, recordings, caches. CI runs a **secret scan**.
 
