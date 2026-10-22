@@ -89,6 +89,9 @@ Type a line as your "speech," or install the voice extra (`pip install -e '.[voi
 spoken via macOS `say`; the duck reacts with motion + chirps. **Actions are confirmed by a spoken yes/no
 from the live mic only** — a "yes" in the model's text or a tool result never counts.
 
+For a dry British-narrator manner, run with `MICRODUCK_PERSONA=narrator` — it pairs well with a
+measured `MICRODUCK_SAY_RATE` (e.g. `165`) and an en-GB voice like Daniel or Oliver.
+
 ### Vision & the duck-cam
 
 With a camera-enabled `duck-sim` (or robot), ask *"what do you see?"* — the `see` tool captures a frame
@@ -144,14 +147,14 @@ robot over an `ssh -L` forwarded socket. Contract details and the hardware roadm
 | `MICRODUCK_LLM_PROVIDER` | `anthropic` | `anthropic` (Claude) or `openai` (OpenAI-compatible). |
 | `MICRODUCK_MODEL` | provider default | Model name (`claude-opus-5-5`, or e.g. `llama3.2`). |
 | `MICRODUCK_OPENAI_BASE_URL` | `http://localhost:11434/v1` | OpenAI-compatible endpoint (Ollama by default). |
-| `MICRODUCK_PERSONA` | `duckling` | `duckling`, `zen`, `scholar`, `grumpy`. |
+| `MICRODUCK_PERSONA` | `duckling` | `duckling`, `zen`, `scholar`, `grumpy`, `narrator`. |
 | `MICRODUCK_ROBOT_BACKEND` | `fake` | `fake` (in-process) or `rpc` (real duck-sim / robot). |
 | `MICRODUCK_ROBOT_SOCKET` | `~/.cache/duck-sim/duck-a.sock` | Unix socket for the `rpc` backend. |
 | `MICRODUCK_CAMERA_URL` | `http://127.0.0.1:8080/frame` | Camera snapshot endpoint for the `see` tool. |
 | `MICRODUCK_VOICE_INPUT` | `stdin` | `stdin` (typed) or `mic` (needs the `[voice]` extra). |
 | `MICRODUCK_VOICE_OUTPUT` | `host` | `host` (Mac speaker) or `duck` (through the duck via SSH). |
 
-Less-common knobs — `MICRODUCK_PERSONA` detail, `MICRODUCK_MEMORY_PATH`, `MICRODUCK_SAY_VOICE`,
+Less-common knobs — `MICRODUCK_PERSONA` detail, `MICRODUCK_MEMORY_PATH`, `MICRODUCK_SAY_VOICE`, `MICRODUCK_SAY_RATE`,
 `MICRODUCK_BARGE_IN`, `MICRODUCK_STT_MODEL`, the `MICRODUCK_DUCK_SSH_*` / audio-device settings,
 `MICRODUCK_API_VERSION`, `MICRODUCK_CLAUDE_MAX_TOKENS` — are listed in
 [`config.py`](src/microduck_claude/config.py).

@@ -57,8 +57,11 @@ def _default_runner(cmd: Sequence[str]) -> object:
 class MacSayTTS:
     """Speaks via the macOS ``say`` command. ``runner`` is injectable for tests."""
 
-    def __init__(self, voice: str | None = None, runner: Runner | None = None) -> None:
+    def __init__(
+        self, voice: str | None = None, runner: Runner | None = None, *, rate: int = 0
+    ) -> None:
         self._voice = voice
+        self._rate = rate
         self._runner = runner if runner is not None else _default_runner
 
     @staticmethod
@@ -69,6 +72,8 @@ class MacSayTTS:
         cmd = ["say"]
         if self._voice:
             cmd += ["-v", self._voice]
+        if self._rate:
+            cmd += ["-r", str(self._rate)]
         cmd.append(text)
         self._runner(cmd)
 

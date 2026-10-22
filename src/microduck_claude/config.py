@@ -28,6 +28,7 @@ class Config:
     api_version: int = API_VERSION
     voice_output: str = "host"  # "host" (Mac speaker) | "duck" (speak through the duck via SSH)
     say_voice: str = ""  # macOS 'say' voice (e.g. "Daniel"); empty = auto-pick a working one
+    say_rate: int = 0  # macOS 'say' words-per-minute (0 = system default; ~165 reads narrator-ish)
     camera_url: str = "http://127.0.0.1:8080/frame"  # duck camera snapshot endpoint
     duck_ssh_host: str = ""
     duck_audio_device: str = "plughw:aic3104"
@@ -56,6 +57,7 @@ class Config:
             api_version=_int_env("MICRODUCK_API_VERSION", API_VERSION),
             voice_output=os.environ.get("MICRODUCK_VOICE_OUTPUT", "host").lower(),
             say_voice=os.environ.get("MICRODUCK_SAY_VOICE", ""),
+            say_rate=_int_env("MICRODUCK_SAY_RATE", 0),
             camera_url=os.environ.get("MICRODUCK_CAMERA_URL", "http://127.0.0.1:8080/frame"),
             duck_ssh_host=os.environ.get("MICRODUCK_DUCK_SSH_HOST", ""),
             duck_audio_device=os.environ.get("MICRODUCK_DUCK_AUDIO_DEVICE", "plughw:aic3104"),

@@ -205,7 +205,7 @@ def _build_voice_tts(config: Config) -> tuple[TextToSpeech, str, str]:
     if MacSayTTS.available():
         voice = config.say_voice or pick_say_voice() or ""
         label = f"say:{voice}" if voice else "say"
-        return MacSayTTS(voice=voice or None), label, voice
+        return MacSayTTS(voice=voice or None, rate=config.say_rate), label, voice
     return PrintTTS(), "print", ""
 
 
@@ -218,7 +218,9 @@ def _build_barge_in(config: Config, tts_kind: str, voice: str) -> BargeInControl
     if not _audio_capture_available():
         print("(barge-in needs the voice extra for mic capture; disabled)", file=sys.stderr)
         return None
-    return BargeInController(InterruptibleSayTTS(voice=voice or None), MicSpeechDetector())
+    return BargeInController(
+        InterruptibleSayTTS(voice=voice or None, rate=config.say_rate), MicSpeechDetector()
+    )
 
 
 def _run_voice(

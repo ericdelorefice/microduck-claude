@@ -70,13 +70,16 @@ class BargeInController:
 class InterruptibleSayTTS:
     """macOS `say` as an interruptible speaker (terminates the process on stop)."""
 
-    def __init__(self, voice: str | None = None) -> None:
+    def __init__(self, voice: str | None = None, *, rate: int = 0) -> None:
         self._voice = voice
+        self._rate = rate
 
     def speak(self, text: str, stop: threading.Event) -> None:
         cmd = ["say"]
         if self._voice:
             cmd += ["-v", self._voice]
+        if self._rate:
+            cmd += ["-r", str(self._rate)]
         cmd.append(text)
         proc = subprocess.Popen(cmd)
         try:
