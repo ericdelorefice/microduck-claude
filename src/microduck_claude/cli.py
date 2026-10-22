@@ -1,14 +1,25 @@
-"""`microduck-claude chat` — a text REPL that drives the FakeRobot."""
+"""`microduck-claude chat` (text) and `microduck-claude voice` (host voice loop)."""
 
 from __future__ import annotations
 
 import sys
+from typing import Any
 
 from .assembly import build_registry
 from .brain import SYSTEM_PROMPT, Brain, BrainConfig, MissingAPIKeyError, build_client
 from .config import Config
-from .robot import FakeRobot, JsonRpcError, RobotCall, build_robot
+from .robot import FakeRobot, JsonRpcError, RobotCall, RobotInterface, build_robot
 from .safety import Dispatcher
+from .tools import ToolRegistry
+from .voice import (
+    MacSayTTS,
+    PrintTTS,
+    SpeechReactor,
+    StdinSTT,
+    TextToSpeech,
+    VoiceConfirmer,
+    VoiceLoop,
+)
 
 
 class ConsoleConfirmer:
@@ -54,11 +65,16 @@ def _summarize(calls: list[RobotCall]) -> str:
 
 
 def main(argv: list[str] | None = None) -> int:
-    args = sys.argv[1:] if argv is None else argv
-    if list(args) != ["chat"]:
-        print("usage: microduck-claude chat", file=sys.stderr)
-        return 2
+    args = sys.argv[1:] if argv is None else list(argv)
+    if args == ["chat"]:
+        return _run(voice=False)
+    if args == ["voice"]:
+        return _run(voice=True)
+    print("usage: microduck-claude {chat|voice}", file=sys.stderr)
+    return 2
 
+
+def _run(*, voice: bool) -> int:
     config = Config.from_env()
 
     try:
@@ -80,46 +96,74 @@ def main(argv: list[str] | None = None) -> int:
         )
         return 1
 
-    fake = robot if isinstance(robot, FakeRobot) else None
     registry = build_registry(robot)
-    dispatcher = Dispatcher(registry, ConsoleConfirmer())
-    brain = Brain(
-        client,
-        registry,
-        dispatcher,
-        system=SYSTEM_PROMPT,
-        config=BrainConfig(model=config.model, max_tokens=config.max_tokens),
-    )
-
-    print(f"🦆  Talk to your Microduck (backend={config.robot_backend}). Ctrl-D to quit.\n")
+    brain_config = BrainConfig(model=config.model, max_tokens=config.max_tokens)
     try:
-        while True:
-            try:
-                user = input("you › ").strip()
-            except (EOFError, KeyboardInterrupt):
-                print()
-                break
-            if not user:
-                continue
-
-            before = len(fake.calls) if fake is not None else 0
-            try:
-                turn = brain.send(user)
-            except Exception as exc:  # keep the REPL alive on API/transport errors
-                print(f"(error talking to Claude: {exc})", file=sys.stderr)
-                continue
-
-            for text in turn.texts:
-                print(f"duck › {text}")
-            if turn.refused and not turn.texts:
-                print("duck › (declined to respond)")
-            if fake is not None:
-                summary = _summarize(fake.calls[before:])
-                if summary:
-                    print(f"      🦆 {summary}")
+        if voice:
+            _run_voice(client, robot, registry, brain_config, config)
+        else:
+            _run_chat(client, robot, registry, brain_config, config)
     finally:
         close = getattr(robot, "close", None)
         if callable(close):
             close()
-
     return 0
+
+
+def _run_chat(
+    client: Any,
+    robot: RobotInterface,
+    registry: ToolRegistry,
+    brain_config: BrainConfig,
+    config: Config,
+) -> None:
+    dispatcher = Dispatcher(registry, ConsoleConfirmer())
+    brain = Brain(client, registry, dispatcher, system=SYSTEM_PROMPT, config=brain_config)
+    fake = robot if isinstance(robot, FakeRobot) else None
+
+    print(f"🦆  Talk to your Microduck (backend={config.robot_backend}). Ctrl-D to quit.\n")
+    while True:
+        try:
+            user = input("you › ").strip()
+        except (EOFError, KeyboardInterrupt):
+            print()
+            break
+        if not user:
+            continue
+
+        before = len(fake.calls) if fake is not None else 0
+        try:
+            turn = brain.send(user)
+        except Exception as exc:  # keep the REPL alive on API/transport errors
+            print(f"(error talking to Claude: {exc})", file=sys.stderr)
+            continue
+
+        for text in turn.texts:
+            print(f"duck › {text}")
+        if turn.refused and not turn.texts:
+            print("duck › (declined to respond)")
+        if fake is not None:
+            summary = _summarize(fake.calls[before:])
+            if summary:
+                print(f"      🦆 {summary}")
+
+
+def _run_voice(
+    client: Any,
+    robot: RobotInterface,
+    registry: ToolRegistry,
+    brain_config: BrainConfig,
+    config: Config,
+) -> None:
+    stt = StdinSTT()
+    tts: TextToSpeech = MacSayTTS() if MacSayTTS.available() else PrintTTS()
+    dispatcher = Dispatcher(registry, VoiceConfirmer(stt, tts))
+    brain = Brain(client, registry, dispatcher, system=SYSTEM_PROMPT, config=brain_config)
+    reactor = SpeechReactor(robot)
+
+    tts_kind = "say" if MacSayTTS.available() else "print"
+    print(
+        f"🦆  Voice mode (backend={config.robot_backend}, tts={tts_kind}). "
+        "Speak by typing a line; Ctrl-D to quit.\n"
+    )
+    VoiceLoop(brain, stt, tts, reactor).run()

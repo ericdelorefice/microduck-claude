@@ -2,7 +2,7 @@
 
 **A safe, conversational Claude "brain" for the Pollen Robotics × Hugging Face Microduck robot.**
 
-Status: pre-code planning · Last updated: 2026-10-22
+Status: Milestones 1–3 implemented (see §7) · Last updated: 2026-10-22
 
 ---
 
@@ -370,10 +370,13 @@ through the safe tool path; thorough tests. No hardware, no real sim process, no
 drop-in. Contract/integration tests against the sim; handle `IntentResult{accepted:false}` and the
 `api_version` handshake.
 
-### Milestone 3 — Voice loop on the host
-STT (VAD + Whisper-class, local-first like Reachy's Silero VAD) and TTS behind provider-agnostic
-interfaces; barge-in; the duck reacts with motion + `robot.sound` chirps in time with speech. Revisit
-model choice for latency (Sonnet/Haiku are options — owner's call). Voice audio stays on the host.
+### Milestone 3 — Voice loop on the host ✅ (host machinery done)
+`SpeechToText` / `TextToSpeech` interfaces with light host backends (stdin stand-in, `PrintTTS`, macOS
+`say`), a `VoiceLoop` orchestrator, a `SpeechReactor` (bounded expressive motion + chirps), and a
+`VoiceConfirmer` that gates actions by spoken yes/no — consulting **only the live mic**, never model or
+tool text. `microduck-claude voice` runs it on the fake duck today. Remaining: a real microphone +
+speech-recognition backend (e.g. faster-whisper + sounddevice) behind a `[voice]` extra, barge-in, and a
+latency pass on model choice (Sonnet/Haiku are options). Voice audio stays on the host.
 
 ### Milestone 4 — Richer expression, memory, persona
 Full expression library (mirror `microduck_emotions`), optional persona profiles and long-term memory
@@ -392,6 +395,20 @@ from the environment; nothing committed.
 ### Milestone 5 — Real hardware bring-up
 When hardware arrives (~Q1 2027): the same `RpcRobot` over SSH-forwarded socket or the rendezvous lane,
 safety re-validated on a body that can actually move, conservative speed/zone limits first.
+
+### Milestone — Pluggable LLM backends (provider-agnostic brain)
+Let the brain run on other models/providers, not only Claude. Introduce an `LLM` interface the
+conversation loop depends on (chat + tool-use normalized to a provider-neutral shape), with the Anthropic
+SDK as the **built-in default and reference**, and other providers (OpenAI, Gemini, local models via
+Ollama / llama.cpp, etc.) as **optional adapters behind extras** — the open core never depends on them.
+Tools, the safety gate, expressions, robot, and voice are already provider-agnostic, so only the brain
+changes. Claude stays the recommended default.
+
+### Milestone — Local playground / test console
+A local analog to Pollen's browser simulator: a small UI (web or TUI) that visualizes the duck's live
+state from the `FakeRobot` (head / beak / pose, current gesture, chirps) and lets you talk to it, so the
+whole experience — including the voice loop — can be developed, demoed, and personally tested **without
+hardware**. Builds on the existing `FakeRobot` call stream; optionally mirrors to a real `duck-sim`.
 
 ---
 

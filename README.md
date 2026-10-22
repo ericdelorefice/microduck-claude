@@ -22,8 +22,12 @@ project adds the conversational layer on top, in the style of Pollen's Reachy Mi
   `duck-ipc-proto` **JSON-RPC 2.0 / NDJSON Unix-socket** contract — a drop-in for `FakeRobot`. Verified
   end-to-end over a real socket against a faithful fake server; validate against a running `duck-sim`
   or hardware when available.
-- **Next:** a voice loop (speech-to-text / text-to-speech on the host). The duck can also be made to
-  *speak* via SSH — see [Giving the duck a voice](#giving-the-duck-a-voice-planned).
+- **Milestone 3 (done):** a host **voice loop** — swappable STT/TTS, the duck reacting with motion +
+  chirps, and spoken yes/no action confirmation. `microduck-claude voice` runs it on the fake duck today
+  (type to "speak", hear replies via macOS `say`); a real microphone backend plugs in behind the interface.
+- **Next / roadmap:** pluggable LLM backends (other models, with Claude the default), a local visual
+  playground, richer expression + memory, speaking *through* the duck via SSH audio, and hardware
+  bring-up — see [`docs/PLAN.md`](docs/PLAN.md) §7.
 
 ## Requirements
 
@@ -77,6 +81,18 @@ runs after you confirm it**.
 | `MICRODUCK_ROBOT_BACKEND` | `fake` | `fake` (in-process) or `rpc` (real duck-sim / robot). |
 | `MICRODUCK_ROBOT_SOCKET` | `~/.cache/duck-sim/duck-a.sock` | Unix socket for the `rpc` backend. |
 | `MICRODUCK_API_VERSION` | `44` | `duck-ipc-proto` handshake version. |
+
+### Voice mode
+
+```bash
+microduck-claude voice
+```
+
+Talk to the duck out loud — well, type a line as your "speech" for now; a real microphone backend plugs
+in behind the `SpeechToText` interface. Claude's replies are spoken via the macOS `say` command (or
+printed if `say` isn't available), and the duck reacts with motion + chirps. **Actions are confirmed by
+a spoken yes/no**, captured from the live mic only — a "yes" in the model's text or a tool result can
+never confirm one.
 
 ## Driving the real simulator (optional)
 
