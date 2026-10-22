@@ -2,12 +2,15 @@
 
 from __future__ import annotations
 
+import os
 import sys
+import webbrowser
 from typing import Any
 
 from .assembly import build_registry
 from .brain import SYSTEM_PROMPT, Brain, BrainConfig, MissingAPIKeyError, build_client
 from .config import Config
+from .playground import PlaygroundApp, build_server
 from .robot import FakeRobot, JsonRpcError, RobotCall, RobotInterface, build_robot
 from .safety import Dispatcher
 from .tools import ToolRegistry
@@ -70,7 +73,9 @@ def main(argv: list[str] | None = None) -> int:
         return _run(voice=False)
     if args == ["voice"]:
         return _run(voice=True)
-    print("usage: microduck-claude {chat|voice}", file=sys.stderr)
+    if args == ["playground"]:
+        return _run_playground()
+    print("usage: microduck-claude {chat|voice|playground}", file=sys.stderr)
     return 2
 
 
@@ -167,3 +172,46 @@ def _run_voice(
         "Speak by typing a line; Ctrl-D to quit.\n"
     )
     VoiceLoop(brain, stt, tts, reactor).run()
+
+
+def _playground_port() -> int:
+    raw = os.environ.get("MICRODUCK_PLAYGROUND_PORT", "8777")
+    try:
+        return int(raw)
+    except ValueError:
+        return 8777
+
+
+def _run_playground() -> int:
+    config = Config.from_env()
+    client: Any | None
+    try:
+        client = build_client()
+    except MissingAPIKeyError:
+        client = None
+        print("(no ANTHROPIC_API_KEY — chat disabled; gesture preview + visualization still work)")
+
+    app = PlaygroundApp(
+        client,
+        brain_config=BrainConfig(model=config.model, max_tokens=config.max_tokens),
+    )
+    port = _playground_port()
+    try:
+        server = build_server(app, port=port)
+    except OSError as exc:
+        print(f"could not start playground on port {port}: {exc}", file=sys.stderr)
+        return 1
+
+    url = f"http://127.0.0.1:{port}/"
+    print(f"🦆  Playground running at {url}  (Ctrl-C to stop)")
+    try:
+        webbrowser.open(url)
+    except Exception:
+        pass
+    try:
+        server.serve_forever()
+    except KeyboardInterrupt:
+        print("\nstopping…")
+    finally:
+        server.shutdown()
+    return 0

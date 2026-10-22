@@ -7,6 +7,7 @@ simulator process, no network. It structurally satisfies :class:`RobotInterface`
 
 from __future__ import annotations
 
+from collections.abc import Callable
 from dataclasses import dataclass, field
 
 from .interface import SOUND_TAGS, STOCK_BEHAVIORS
@@ -23,8 +24,9 @@ class RobotCall:
 class FakeRobot:
     """An in-process stand-in for a Microduck that records what it was told to do."""
 
-    def __init__(self) -> None:
+    def __init__(self, on_call: Callable[[RobotCall], None] | None = None) -> None:
         self.calls: list[RobotCall] = []
+        self._on_call = on_call  # optional live observer (used by the playground)
         self._battery = 0.87
         self._behaviors: list[str] = list(STOCK_BEHAVIORS)
         self._head: dict[str, float] = {
@@ -38,7 +40,10 @@ class FakeRobot:
         self._driving = False
 
     def _record(self, method: str, **kwargs: object) -> None:
-        self.calls.append(RobotCall(method=method, kwargs=dict(kwargs)))
+        call = RobotCall(method=method, kwargs=dict(kwargs))
+        self.calls.append(call)
+        if self._on_call is not None:
+            self._on_call(call)
 
     # -- intents ---------------------------------------------------------------
 

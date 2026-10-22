@@ -25,9 +25,12 @@ project adds the conversational layer on top, in the style of Pollen's Reachy Mi
 - **Milestone 3 (done):** a host **voice loop** — swappable STT/TTS, the duck reacting with motion +
   chirps, and spoken yes/no action confirmation. `microduck-claude voice` runs it on the fake duck today
   (type to "speak", hear replies via macOS `say`); a real microphone backend plugs in behind the interface.
-- **Next / roadmap:** pluggable LLM backends (other models, with Claude the default), a local visual
-  playground, richer expression + memory, speaking *through* the duck via SSH audio, and hardware
-  bring-up — see [`docs/PLAN.md`](docs/PLAN.md) §7.
+- **Playground (done):** `microduck-claude playground` opens a local web page that visualizes the fake
+  duck live (head, beak, pose, chirps) with a chat box and gesture-preview buttons — a hardware-free
+  test area, no robot required.
+- **Next / roadmap:** pluggable LLM backends (other models, with Claude the default), richer expression
+  + memory, speaking *through* the duck via SSH audio, and hardware bring-up — see
+  [`docs/PLAN.md`](docs/PLAN.md) §7.
 
 ## Requirements
 
@@ -93,6 +96,17 @@ in behind the `SpeechToText` interface. Claude's replies are spoken via the macO
 printed if `say` isn't available), and the duck reacts with motion + chirps. **Actions are confirmed by
 a spoken yes/no**, captured from the live mic only — a "yes" in the model's text or a tool result can
 never confirm one.
+
+### Playground
+
+```bash
+microduck-claude playground
+```
+
+Opens a local web page (default `http://127.0.0.1:8777`) that **visualizes the fake duck live** — its
+head tilts, its beak opens, and chirps/gestures show as they happen — with a chat box and
+gesture-preview buttons. The visualization and gesture preview need **no API key**; the chat box uses
+your key if it's set. A hardware-free test area for the whole experience.
 
 ## Driving the real simulator (optional)
 
