@@ -1,0 +1,80 @@
+[build-system]
+requires = ["hatchling"]
+build-backend = "hatchling.build"
+
+[project]
+name = "microduck-claude"
+version = "0.1.0"
+description = "A safe, conversational Claude brain for the Pollen Robotics x Hugging Face Microduck robot."
+readme = "README.md"
+requires-python = ">=3.10"
+license = { file = "LICENSE" }
+authors = [{ name = "The microduck-claude Authors" }]
+keywords = ["microduck", "pollen-robotics", "claude", "anthropic", "robotics", "voice-assistant"]
+classifiers = [
+    "License :: OSI Approved :: Apache Software License",
+    "Programming Language :: Python :: 3",
+    "Programming Language :: Python :: 3.10",
+    "Development Status :: 3 - Alpha",
+    "Intended Audience :: Developers",
+    "Topic :: Scientific/Engineering :: Artificial Intelligence",
+]
+# Minimal core: only the official Anthropic SDK. Audio/RPC/transport deps are
+# deliberately NOT here — they arrive as optional extras in later milestones so
+# the safety-critical core stays dependency-light.
+dependencies = [
+    "anthropic>=0.40",
+]
+
+[project.optional-dependencies]
+dev = [
+    "ruff>=0.6",
+    "mypy>=1.8",
+    "pytest>=8.0",
+]
+
+[project.scripts]
+microduck-claude = "microduck_claude.cli:main"
+
+# Private/external assistants register extra tools against THIS entry-point group.
+# The open core ships none and depends on none (see CLAUDE.md guardrail #6).
+# [project.entry-points."microduck_claude.tool_providers"]
+# my_private_tools = "my_pkg:provider"
+
+[tool.hatch.build.targets.wheel]
+packages = ["src/microduck_claude"]
+
+[tool.ruff]
+line-length = 100
+target-version = "py310"
+src = ["src", "tests"]
+
+[tool.ruff.lint]
+select = ["E", "F", "I", "UP", "B", "W", "C4"]
+
+[tool.mypy]
+python_version = "3.10"
+files = ["src", "tests"]
+disallow_untyped_defs = true
+disallow_incomplete_defs = true
+check_untyped_defs = true
+no_implicit_optional = true
+warn_redundant_casts = true
+warn_unused_ignores = true
+warn_unused_configs = true
+
+# The Anthropic SDK is imported lazily and only in the client factory; tests mock
+# the client, so mypy need not resolve its stubs.
+[[tool.mypy.overrides]]
+module = ["anthropic.*"]
+ignore_missing_imports = true
+
+# Tests use dynamic fakes and pytest-style functions; relax annotation requirements.
+[[tool.mypy.overrides]]
+module = ["tests.*"]
+disallow_untyped_defs = false
+disallow_incomplete_defs = false
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+addopts = "-q"
