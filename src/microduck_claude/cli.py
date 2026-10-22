@@ -7,8 +7,9 @@ import sys
 import webbrowser
 
 from .assembly import build_registry
-from .brain import LLM, SYSTEM_PROMPT, Brain, MissingAPIKeyError, build_llm
+from .brain import LLM, Brain, MissingAPIKeyError, build_llm, system_prompt_for
 from .config import Config
+from .memory import MemoryStore
 from .playground import PlaygroundApp, build_server
 from .robot import FakeRobot, JsonRpcError, RobotCall, RobotInterface, build_robot
 from .safety import Dispatcher
@@ -100,12 +101,14 @@ def _run(*, voice: bool) -> int:
         )
         return 1
 
-    registry = build_registry(robot)
+    memory = MemoryStore(config.memory_path)
+    registry = build_registry(robot, memory=memory)
+    system = system_prompt_for(config.persona)
     try:
         if voice:
-            _run_voice(llm, robot, registry, config)
+            _run_voice(llm, robot, registry, system, config)
         else:
-            _run_chat(llm, robot, registry, config)
+            _run_chat(llm, robot, registry, system, config)
     finally:
         close = getattr(robot, "close", None)
         if callable(close):
@@ -113,14 +116,16 @@ def _run(*, voice: bool) -> int:
     return 0
 
 
-def _run_chat(llm: LLM, robot: RobotInterface, registry: ToolRegistry, config: Config) -> None:
+def _run_chat(
+    llm: LLM, robot: RobotInterface, registry: ToolRegistry, system: str, config: Config
+) -> None:
     dispatcher = Dispatcher(registry, ConsoleConfirmer())
-    brain = Brain(llm, registry, dispatcher, system=SYSTEM_PROMPT)
+    brain = Brain(llm, registry, dispatcher, system=system)
     fake = robot if isinstance(robot, FakeRobot) else None
 
     print(
         f"🦆  Talk to your Microduck (backend={config.robot_backend}, "
-        f"model={config.model}). Ctrl-D to quit.\n"
+        f"model={config.model}, persona={config.persona}). Ctrl-D to quit.\n"
     )
     while True:
         try:
@@ -148,17 +153,20 @@ def _run_chat(llm: LLM, robot: RobotInterface, registry: ToolRegistry, config: C
                 print(f"      🦆 {summary}")
 
 
-def _run_voice(llm: LLM, robot: RobotInterface, registry: ToolRegistry, config: Config) -> None:
+def _run_voice(
+    llm: LLM, robot: RobotInterface, registry: ToolRegistry, system: str, config: Config
+) -> None:
     stt = StdinSTT()
     tts: TextToSpeech = MacSayTTS() if MacSayTTS.available() else PrintTTS()
     dispatcher = Dispatcher(registry, VoiceConfirmer(stt, tts))
-    brain = Brain(llm, registry, dispatcher, system=SYSTEM_PROMPT)
+    brain = Brain(llm, registry, dispatcher, system=system)
     reactor = SpeechReactor(robot)
 
     tts_kind = "say" if MacSayTTS.available() else "print"
     print(
         f"🦆  Voice mode (backend={config.robot_backend}, tts={tts_kind}, "
-        f"model={config.model}). Speak by typing a line; Ctrl-D to quit.\n"
+        f"model={config.model}, persona={config.persona}). Speak by typing a line; "
+        "Ctrl-D to quit.\n"
     )
     VoiceLoop(brain, stt, tts, reactor).run()
 

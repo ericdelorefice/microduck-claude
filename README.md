@@ -31,8 +31,10 @@ project adds the conversational layer on top, in the style of Pollen's Reachy Mi
 - **Multiple models (done):** the brain runs on any model behind a provider-neutral `LLM` interface —
   Claude via the official SDK (default), or any OpenAI-compatible server (OpenAI, or local models via
   Ollama) with `MICRODUCK_LLM_PROVIDER=openai`.
-- **Next / roadmap:** richer expression + memory, speaking *through* the duck via SSH audio, and
-  hardware bring-up — see [`docs/PLAN.md`](docs/PLAN.md) §7.
+- **Expression, memory & persona (done):** 23 gestures incl. emotions; a local long-term memory
+  (`remember` / `recall` / `forget`, writes gated); and persona profiles (`MICRODUCK_PERSONA`).
+- **Next / roadmap:** speaking *through* the duck via SSH audio, and hardware bring-up — see
+  [`docs/PLAN.md`](docs/PLAN.md) §7.
 
 ## Requirements
 
@@ -85,6 +87,8 @@ runs after you confirm it**.
 | `MICRODUCK_MODEL` | provider default | Model name (`claude-opus-5-5`, or e.g. `llama3.2` for Ollama). |
 | `MICRODUCK_OPENAI_BASE_URL` | `http://localhost:11434/v1` | OpenAI-compatible endpoint (Ollama by default). |
 | `MICRODUCK_CLAUDE_MODEL` | `claude-opus-5-5` | (Legacy) Claude model; `MICRODUCK_MODEL` overrides it. |
+| `MICRODUCK_PERSONA` | `duckling` | Personality: `duckling`, `zen`, `scholar`, `grumpy`. |
+| `MICRODUCK_MEMORY_PATH` | `~/.microduck-claude/memory.json` | Where the duck stores what it remembers (local, never committed). |
 | `MICRODUCK_CLAUDE_MAX_TOKENS` | `4096` | Max response tokens. |
 | `MICRODUCK_ROBOT_BACKEND` | `fake` | `fake` (in-process) or `rpc` (real duck-sim / robot). |
 | `MICRODUCK_ROBOT_SOCKET` | `~/.cache/duck-sim/duck-a.sock` | Unix socket for the `rpc` backend. |
