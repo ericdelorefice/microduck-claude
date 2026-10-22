@@ -32,6 +32,7 @@ class Config:
     duck_ssh_user: str = "microduck"
     voice_input: str = "stdin"  # "stdin" (typed) | "mic" (microphone STT; needs the [voice] extra)
     stt_model: str = "base.en"
+    barge_in: bool = False
 
     @classmethod
     def from_env(cls) -> Config:
@@ -57,6 +58,7 @@ class Config:
             duck_ssh_user=os.environ.get("MICRODUCK_DUCK_SSH_USER", "microduck"),
             voice_input=os.environ.get("MICRODUCK_VOICE_INPUT", "stdin").lower(),
             stt_model=os.environ.get("MICRODUCK_STT_MODEL", "base.en"),
+            barge_in=os.environ.get("MICRODUCK_BARGE_IN", "").lower() in ("1", "true", "yes", "on"),
         )
 
 

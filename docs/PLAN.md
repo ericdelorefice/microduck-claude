@@ -377,8 +377,11 @@ drop-in. Contract/integration tests against the sim; handle `IntentResult{accept
 tool text. `microduck-claude voice` runs it today, with a **real on-device microphone backend** available via the
 `[voice]` extra (`FasterWhisperSTT`: sounddevice + faster-whisper — MIT, no torch, Apple-Silicon friendly,
 built-in Silero VAD; `MICRODUCK_VOICE_INPUT=mic`). Chosen after a 2026 survey of STT/VAD options (over
-mlx-whisper / whisper.cpp / vosk, and avoiding TEN-VAD's non-compete licence). Remaining: barge-in
-(duck-then-confirm, host path only) and a latency pass on model choice. Voice audio stays on the host.
+mlx-whisper / whisper.cpp / vosk, and avoiding TEN-VAD's non-compete licence). Barge-in is scaffolded
+(`BargeInController`, `MICRODUCK_BARGE_IN`): the user can interrupt the duck, cutting on *sustained*
+speech — the confirm step that avoids false cut-offs on a brief noise — on the host `say` path only
+(experimental; validate with a mic). Remaining: amplitude "ducking" (needs a volume-controllable player;
+`say` can't), acoustic echo cancellation, and a latency pass on model choice. Voice audio stays on the host.
 
 ### Milestone 4 — Richer expression, memory, persona ✅ (built)
 23 gestures including emotions (sad / angry / surprised / scared / sleepy / excited / proud / shy),
