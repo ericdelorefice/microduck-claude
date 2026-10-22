@@ -98,6 +98,7 @@ runs after you confirm it**.
 | `MICRODUCK_DUCK_AUDIO_DEVICE` | `plughw:aic3104` | Duck ALSA device (`default` on the beta board). |
 | `MICRODUCK_VOICE_INPUT` | `stdin` | `stdin` (typed) or `mic` (microphone STT; needs `pip install '.[voice]'`). |
 | `MICRODUCK_STT_MODEL` | `base.en` | faster-whisper model for mic STT (e.g. `small.en`, `base`). |
+| `MICRODUCK_BARGE_IN` | `off` | Interrupt the duck mid-reply (host `say` + mic; experimental). |
 | `MICRODUCK_CLAUDE_MAX_TOKENS` | `4096` | Max response tokens. |
 | `MICRODUCK_ROBOT_BACKEND` | `fake` | `fake` (in-process) or `rpc` (real duck-sim / robot). |
 | `MICRODUCK_ROBOT_SOCKET` | `~/.cache/duck-sim/duck-a.sock` | Unix socket for the `rpc` backend. |

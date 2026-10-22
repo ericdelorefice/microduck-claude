@@ -16,9 +16,12 @@ from .robot import FakeRobot, JsonRpcError, RobotCall, RobotInterface, build_rob
 from .safety import Dispatcher
 from .tools import ToolRegistry
 from .voice import (
+    BargeInController,
     FasterWhisperSTT,
+    InterruptibleSayTTS,
     MacSayTTS,
     MacSayWavRenderer,
+    MicSpeechDetector,
     PrintTTS,
     SpeechReactor,
     SpeechToText,
@@ -167,6 +170,10 @@ def _mic_stt_available() -> bool:
     )
 
 
+def _audio_capture_available() -> bool:
+    return all(importlib.util.find_spec(mod) is not None for mod in ("sounddevice", "numpy"))
+
+
 def _build_voice_stt(config: Config) -> tuple[SpeechToText, str]:
     """Pick the voice input: typed stdin (default), or the microphone (needs [voice])."""
     if config.voice_input == "mic":
@@ -189,21 +196,35 @@ def _build_voice_tts(config: Config) -> tuple[TextToSpeech, str]:
     return PrintTTS(), "print"
 
 
+def _build_barge_in(config: Config, tts_kind: str) -> BargeInController | None:
+    if not config.barge_in:
+        return None
+    if tts_kind != "say":
+        print("(barge-in needs host 'say' audio output; disabled)", file=sys.stderr)
+        return None
+    if not _audio_capture_available():
+        print("(barge-in needs the voice extra for mic capture; disabled)", file=sys.stderr)
+        return None
+    return BargeInController(InterruptibleSayTTS(), MicSpeechDetector())
+
+
 def _run_voice(
     llm: LLM, robot: RobotInterface, registry: ToolRegistry, system: str, config: Config
 ) -> None:
     stt, stt_kind = _build_voice_stt(config)
     tts, tts_kind = _build_voice_tts(config)
+    barge_in = _build_barge_in(config, tts_kind)
     dispatcher = Dispatcher(registry, VoiceConfirmer(stt, tts))
     brain = Brain(llm, registry, dispatcher, system=system)
     reactor = SpeechReactor(robot)
 
     how = "Speak into your mic" if stt_kind.startswith("mic") else "Speak by typing a line"
+    extra = " · barge-in on" if barge_in is not None else ""
     print(
         f"🦆  Voice mode (in={stt_kind}, out={tts_kind}, model={config.model}, "
-        f"persona={config.persona}). {how}; Ctrl-D to quit.\n"
+        f"persona={config.persona}{extra}). {how}; Ctrl-D to quit.\n"
     )
-    VoiceLoop(brain, stt, tts, reactor).run()
+    VoiceLoop(brain, stt, tts, reactor, barge_in=barge_in).run()
 
 
 def _playground_port() -> int:
