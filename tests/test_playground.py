@@ -7,7 +7,7 @@ import urllib.request
 
 from microduck_claude.playground import DuckState, PlaygroundApp, WebConfirmer, build_server
 from microduck_claude.robot import FakeRobot, RobotCall
-from tests.fakes import FakeAnthropic, text_response
+from tests.fakes import FakeLLM, llm_text
 
 # -- DuckState reducer --------------------------------------------------------
 
@@ -88,23 +88,23 @@ def test_web_confirmer_timeout_is_no() -> None:
 
 
 def test_preview_gesture_moves_the_duck() -> None:
-    app = PlaygroundApp(client=None)
+    app = PlaygroundApp(llm=None)
     assert app.preview_gesture("nod") == {"ok": True, "gesture": "nod"}
     assert app.state_dict()["duck"]["events"] > 0
 
 
 def test_preview_unknown_gesture() -> None:
-    assert PlaygroundApp(client=None).preview_gesture("backflip")["ok"] is False
+    assert PlaygroundApp(llm=None).preview_gesture("backflip")["ok"] is False
 
 
 def test_say_without_key_returns_hint() -> None:
-    out = PlaygroundApp(client=None).say("hello")
+    out = PlaygroundApp(llm=None).say("hello")
     assert out["refused"] is False
     assert out["replies"]
 
 
 def test_say_with_fake_client() -> None:
-    app = PlaygroundApp(client=FakeAnthropic([text_response("Quack!")]))
+    app = PlaygroundApp(llm=FakeLLM([llm_text("Quack!")]))
     assert app.say("hi")["replies"] == ["Quack!"]
 
 
@@ -112,7 +112,7 @@ def test_say_with_fake_client() -> None:
 
 
 def test_server_serves_page_state_and_endpoints() -> None:
-    app = PlaygroundApp(client=FakeAnthropic([text_response("hi there")]))
+    app = PlaygroundApp(llm=FakeLLM([llm_text("hi there")]))
     server = build_server(app, port=0)
     port = server.server_address[1]
     thread = threading.Thread(target=server.serve_forever, daemon=True)

@@ -1,28 +1,16 @@
-"""The conversation orchestrator: a manual Claude tool-use loop.
+"""The conversation orchestrator: a provider-neutral tool-use loop.
 
-A manual loop (rather than an opaque helper) keeps the safety gate explicit and
-easy to test: every tool call the model makes is routed through the Dispatcher,
-and nothing the model emits can bypass it. The Anthropic client is injected, so
-tests run with a fake and no API key.
+The brain manages the tool-use loop and the safety gate; the actual model call and
+all provider specifics live behind the :class:`LLM` interface, which is injected.
 """
 
 from __future__ import annotations
 
-import logging
 from dataclasses import dataclass, field
-from typing import Any
 
 from ..safety.dispatcher import Dispatcher
 from ..tools.base import ToolRegistry
-
-log = logging.getLogger("microduck_claude.brain")
-
-
-@dataclass
-class BrainConfig:
-    model: str = "claude-opus-5-5"
-    max_tokens: int = 4096
-    max_tool_iterations: int = 6
+from .llm import LLM, ToolCall, ToolResult
 
 
 @dataclass
@@ -36,71 +24,47 @@ class Turn:
 class Brain:
     def __init__(
         self,
-        client: Any,
+        llm: LLM,
         registry: ToolRegistry,
         dispatcher: Dispatcher,
         *,
         system: str,
-        config: BrainConfig | None = None,
+        max_tool_iterations: int = 6,
     ) -> None:
-        self._client = client
+        self._llm = llm
         self._registry = registry
         self._dispatcher = dispatcher
         self._system = system
-        self._config = config or BrainConfig()
-        self._messages: list[dict[str, Any]] = []
-
-    @property
-    def messages(self) -> list[dict[str, Any]]:
-        return self._messages
+        self._max_tool_iterations = max_tool_iterations
+        self._started = False
 
     def send(self, user_text: str) -> Turn:
         """Send one user turn, running any tool calls, and return the reply."""
-        self._messages.append({"role": "user", "content": user_text})
+        if not self._started:
+            self._llm.start(self._system, self._registry.specs())
+            self._started = True
+
         turn = Turn()
-
-        for _ in range(self._config.max_tool_iterations):
-            response = self._client.messages.create(
-                model=self._config.model,
-                max_tokens=self._config.max_tokens,
-                system=self._system,
-                tools=self._registry.specs(),
-                thinking={"type": "adaptive"},
-                messages=self._messages,
-            )
-
-            # Safety classifiers may decline (HTTP 200, stop_reason "refusal").
-            if getattr(response, "stop_reason", None) == "refusal":
+        response = self._llm.send_user(user_text)
+        iterations = 0
+        while True:
+            turn.texts.extend(response.texts)
+            if response.refused:
                 turn.refused = True
-                self._messages.append({"role": "assistant", "content": response.content})
                 break
-
-            tool_uses: list[Any] = []
-            for block in response.content:
-                block_type = getattr(block, "type", None)
-                if block_type == "text":
-                    turn.texts.append(block.text)
-                elif block_type == "tool_use":
-                    tool_uses.append(block)
-
-            # Append the assistant turn verbatim so thinking + tool_use blocks are
-            # preserved for the next request.
-            self._messages.append({"role": "assistant", "content": response.content})
-
-            if getattr(response, "stop_reason", None) != "tool_use" or not tool_uses:
+            if not response.tool_calls:
                 break
-
-            results: list[dict[str, Any]] = []
-            for block in tool_uses:
-                outcome = self._dispatcher.dispatch(block.name, dict(block.input or {}))
-                results.append(
-                    {
-                        "type": "tool_result",
-                        "tool_use_id": block.id,
-                        "content": outcome.content_for_model,
-                        "is_error": outcome.is_error,
-                    }
-                )
-            self._messages.append({"role": "user", "content": results})
-
+            iterations += 1
+            if iterations > self._max_tool_iterations:
+                break
+            results = [self._dispatch(call) for call in response.tool_calls]
+            response = self._llm.send_tool_results(results)
         return turn
+
+    def _dispatch(self, call: ToolCall) -> ToolResult:
+        outcome = self._dispatcher.dispatch(call.name, call.input)
+        return ToolResult(
+            tool_call_id=call.id,
+            content=outcome.content_for_model,
+            is_error=outcome.is_error,
+        )

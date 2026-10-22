@@ -15,7 +15,7 @@ from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from typing import Any
 
 from ..assembly import build_registry
-from ..brain import SYSTEM_PROMPT, Brain, BrainConfig
+from ..brain import LLM, SYSTEM_PROMPT, Brain
 from ..expressions import UnknownGestureError, gesture_names, perform_gesture
 from ..robot import FakeRobot, RobotCall
 from ..safety import Dispatcher
@@ -74,13 +74,7 @@ class WebConfirmer:
 class PlaygroundApp:
     """Owns the fake duck, its state, the brain, and the web confirmer."""
 
-    def __init__(
-        self,
-        client: Any | None = None,
-        *,
-        brain_config: BrainConfig | None = None,
-        confirm_timeout: float = 120.0,
-    ) -> None:
+    def __init__(self, llm: LLM | None = None, *, confirm_timeout: float = 120.0) -> None:
         self._lock = threading.Lock()
         self.state = DuckState()
         self.robot = FakeRobot(on_call=self._on_call)
@@ -88,15 +82,7 @@ class PlaygroundApp:
         registry = build_registry(self.robot)
         dispatcher = Dispatcher(registry, self.confirmer)
         self._brain = (
-            Brain(
-                client,
-                registry,
-                dispatcher,
-                system=SYSTEM_PROMPT,
-                config=brain_config or BrainConfig(),
-            )
-            if client is not None
-            else None
+            Brain(llm, registry, dispatcher, system=SYSTEM_PROMPT) if llm is not None else None
         )
 
     def _on_call(self, call: RobotCall) -> None:
