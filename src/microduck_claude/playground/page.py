@@ -70,7 +70,7 @@ PAGE_HTML = """<!doctype html>
       <h3>Talk to the duck</h3>
       <div id="log"></div>
       <div class="row" style="margin-top:8px">
-        <input id="text" type="text" placeholder="Say something (needs ANTHROPIC_API_KEY)">
+        <input id="text" type="text" placeholder="Say something (needs Anthropic credentials)">
         <button class="primary" onclick="send()">Send</button>
       </div>
     </div>

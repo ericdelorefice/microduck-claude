@@ -14,11 +14,14 @@ project adds that, in Reachy-Mini style, safely.
 
 1. **No secrets, no personal data, ever** — not in code, config, fixtures, logs, or git history. No API
    keys, no real calendars/chats/contacts, no private paths, no machine-specific absolute paths.
-2. **API key only from the environment.** Read `ANTHROPIC_API_KEY` from the env the user set. **Never**
-   prompt for it, hard-code it, store it, or log it. CI and all tests must pass with it **unset** (mock
-   the Anthropic client).
-3. **Official Anthropic SDK only** (`anthropic`), model `claude-opus-5-5` (via `MICRODUCK_CLAUDE_MODEL`,
-   default that), adaptive thinking. No other LLM providers, no raw HTTP to the API.
+2. **Credentials only from the environment or the user's own login — never from us.** The Anthropic SDK
+   resolves them itself: `ANTHROPIC_API_KEY`, or an `ant auth login` Console profile (both bill as API
+   usage; Max/Team plans' monthly API credits cover it). **Never** prompt for, hard-code, store, or log
+   any credential. CI and all tests must pass with **none set** (mock the Anthropic client).
+3. **Claude via the official Anthropic SDK is the default** (`anthropic`), model `claude-opus-5-5` (via
+   `MICRODUCK_MODEL`, default that), adaptive thinking — **never raw HTTP** to the Anthropic API. Other
+   models are reached only through the provider-neutral `LLM` seam (`brain/llm.py`); the core takes on no
+   provider SDK beyond `anthropic`.
 4. **Safety is not optional** (see PLAN §6): tools are **allow-listed**; **read-only by default**; every
    **action** requires an explicit **user confirmation** on the user channel — a "yes" from the model or
    from any tool result / heard / read content **never counts**; the gate is a code path, not a prompt.
@@ -50,7 +53,7 @@ The robot is behind **one interface** so `FakeRobot` (in-process, used for Miles
 ```bash
 python3 -m venv .venv && source .venv/bin/activate   # uv not installed here; venv+pip works
 pip install -e ".[dev]"
-microduck-claude chat        # text REPL driving the FakeRobot (needs ANTHROPIC_API_KEY)
+microduck-claude chat        # text REPL driving the FakeRobot (needs a model backend — see README)
 pytest                       # tests — no API key needed; Anthropic is mocked
 ruff check . && ruff format --check .
 mypy

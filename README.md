@@ -43,8 +43,9 @@ project adds the conversational layer on top, in the style of Pollen's Reachy Mi
 ## Requirements
 
 - **Python 3.10+**
-- An Anthropic API key exported as **`ANTHROPIC_API_KEY`**. It is read **only** from the environment —
-  never asked for, stored, or logged.
+- A model backend. The default is **Claude** (needs Anthropic credentials — see **Models & credentials**
+  below), or run a **free local model** with no key at all. Credentials are read **only** from your
+  environment — never asked for, stored, or logged.
 
 ## Setup
 
@@ -57,11 +58,36 @@ pip install -e ".[dev]"
 `uv` works too and is the Pollen-ecosystem standard (`uv venv && uv pip install -e ".[dev]"`); it is not
 required for this project.
 
+## Models & credentials
+
+The brain runs on a swappable backend. Credentials — when a backend needs them — are read **only** from
+your environment and are never asked for, stored, or logged.
+
+**Claude (the default).** Authenticate to the Claude **Console (API)** either way:
+
+```bash
+export ANTHROPIC_API_KEY=sk-ant-...        # a static key, or…
+# …a key-free browser login instead:  brew install anthropics/tap/ant && ant auth login
+```
+
+Paying for Claude:
+
+- **Max / Team plans include monthly API credits that cover the Claude API** — **$200/mo on Max 20x,
+  $100/mo on Max 5x**. Claim once (claude.ai → **Settings → Billing → API credits** → link a Console
+  organization), create a key in that org, and your calls spend the credits first; **usage is never
+  charged to your plan** (requests just pause if you run out). For a hobby duck that is effectively free.
+  See Anthropic's [API credits for Max and Team plans](https://platform.claude.com/docs/en/about-claude/api-credits-for-subscribers).
+- Otherwise it is **pay-as-you-go API**, which is cheap on a small model — set
+  `MICRODUCK_MODEL=claude-haiku-5-5` and a chat turn costs a fraction of a cent.
+
+> A claude.ai **Pro** plan — or **ChatGPT Plus/Pro** — can't fund this app. Consumer subscriptions are
+> walled off from API access by both vendors; only Claude **Max/Team** bridge to the API, and only via
+> the credits above. No eligible plan? Use the **free local path** (see *Using other models* below).
+
 ## Usage
 
 ```bash
-export ANTHROPIC_API_KEY=...     # you set this; the app never stores it
-microduck-claude chat
+microduck-claude chat            # after setting up a backend — see Models & credentials
 ```
 
 This starts a text chat with the duck. The default **`fake`** backend needs no hardware — gestures run
@@ -86,7 +112,7 @@ runs after you confirm it**.
 
 | Variable | Default | Meaning |
 |---|---|---|
-| `ANTHROPIC_API_KEY` | — | Anthropic key (required for the `anthropic` provider; env only). |
+| `ANTHROPIC_API_KEY` | — | Claude API key (env only). Or run `ant auth login` instead; Max/Team API credits cover usage. See **Models & credentials**. |
 | `MICRODUCK_LLM_PROVIDER` | `anthropic` | `anthropic` (Claude) or `openai` (OpenAI-compatible server). |
 | `MICRODUCK_MODEL` | provider default | Model name (`claude-opus-5-5`, or e.g. `llama3.2` for Ollama). |
 | `MICRODUCK_OPENAI_BASE_URL` | `http://localhost:11434/v1` | OpenAI-compatible endpoint (Ollama by default). |
@@ -140,6 +166,11 @@ MICRODUCK_LLM_PROVIDER=openai MICRODUCK_MODEL=llama3.2 microduck-claude chat
 MICRODUCK_LLM_PROVIDER=openai MICRODUCK_MODEL=gpt-4o-mini \
   MICRODUCK_OPENAI_BASE_URL=https://api.openai.com/v1 OPENAI_API_KEY=sk-... microduck-claude chat
 ```
+
+This is the **no-subscription, no-Max path** anyone can use: **Ollama** runs fully local and free, and
+hosted OpenAI-compatible services with free tiers (e.g. **OpenRouter**, **Groq**) work the same way —
+point `MICRODUCK_OPENAI_BASE_URL` at the endpoint and set the key in the env var named by
+`MICRODUCK_OPENAI_KEY_ENV` (default `OPENAI_API_KEY`).
 
 Adding another provider means implementing the small `LLM` interface (`brain/llm.py`) — the open core
 depends on no provider beyond the Anthropic SDK.

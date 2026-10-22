@@ -8,7 +8,7 @@ import sys
 import webbrowser
 
 from .assembly import build_registry
-from .brain import LLM, Brain, MissingAPIKeyError, build_llm, system_prompt_for
+from .brain import LLM, Brain, MissingCredentialsError, build_llm, system_prompt_for
 from .config import Config
 from .memory import MemoryStore
 from .playground import PlaygroundApp, build_server
@@ -94,7 +94,7 @@ def _run(*, voice: bool) -> int:
 
     try:
         llm = build_llm(config)
-    except MissingAPIKeyError as exc:
+    except MissingCredentialsError as exc:
         print(str(exc), file=sys.stderr)
         return 1
 
@@ -240,9 +240,11 @@ def _run_playground() -> int:
     llm: LLM | None
     try:
         llm = build_llm(config)
-    except MissingAPIKeyError:
+    except MissingCredentialsError:
         llm = None
-        print("(no ANTHROPIC_API_KEY — chat disabled; gesture preview + visualization still work)")
+        print(
+            "(no Anthropic credentials — chat disabled; gesture preview + visualization still work)"
+        )
 
     app = PlaygroundApp(llm)
     port = _playground_port()
