@@ -15,6 +15,22 @@ from .llm import LLMResponse, ToolCall, ToolResult
 DEFAULT_MODEL = "claude-opus-5-5"
 
 
+def _image_media_type(data: bytes) -> str:
+    """Sniff an image's media type from its magic bytes (default PNG).
+
+    The camera capture returns whatever the endpoint serves; the Anthropic API rejects a
+    block whose declared media_type doesn't match the bytes, so we detect rather than
+    assume PNG (hardware cameras often serve JPEG).
+    """
+    if data.startswith(b"\xff\xd8\xff"):
+        return "image/jpeg"
+    if data.startswith(b"GIF8"):
+        return "image/gif"
+    if data[:4] == b"RIFF" and data[8:12] == b"WEBP":
+        return "image/webp"
+    return "image/png"
+
+
 class AnthropicLLM:
     def __init__(self, client: Any, *, model: str = DEFAULT_MODEL, max_tokens: int = 4096) -> None:
         self._client = client
@@ -49,13 +65,20 @@ class AnthropicLLM:
         if result.image_png is not None:
             # A vision tool (e.g. the camera) hands back an image block alongside the text.
             encoded = base64.b64encode(result.image_png).decode("ascii")
-            block["content"] = [
-                {"type": "text", "text": result.content},
+            parts: list[dict[str, Any]] = []
+            if result.content:  # the API rejects an empty text block
+                parts.append({"type": "text", "text": result.content})
+            parts.append(
                 {
                     "type": "image",
-                    "source": {"type": "base64", "media_type": "image/png", "data": encoded},
-                },
-            ]
+                    "source": {
+                        "type": "base64",
+                        "media_type": _image_media_type(result.image_png),
+                        "data": encoded,
+                    },
+                }
+            )
+            block["content"] = parts
         return block
 
     def _complete(self) -> LLMResponse:

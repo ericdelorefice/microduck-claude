@@ -192,36 +192,41 @@ def _build_voice_stt(config: Config) -> tuple[SpeechToText, str]:
     return StdinSTT(), "stdin"
 
 
-def _build_voice_tts(config: Config) -> tuple[TextToSpeech, str]:
-    """Pick the voice output: the Mac speaker, or (validate-on-hardware) the duck."""
+def _build_voice_tts(config: Config) -> tuple[TextToSpeech, str, str]:
+    """Pick the voice output: the Mac speaker, or (validate-on-hardware) the duck.
+
+    Returns the TTS, a short kind label, and the resolved macOS ``say`` voice (empty if
+    none) so barge-in can speak in the same voice.
+    """
     if config.voice_output == "duck" and config.duck_ssh_host:
         target = SshTarget(config.duck_ssh_host, config.duck_audio_device, config.duck_ssh_user)
-        return SshDuckTTS(MacSayWavRenderer(), SshDuckAudio(target)), f"duck@{config.duck_ssh_host}"
+        tts = SshDuckTTS(MacSayWavRenderer(), SshDuckAudio(target))
+        return tts, f"duck@{config.duck_ssh_host}", ""
     if MacSayTTS.available():
-        voice = config.say_voice or pick_say_voice()
+        voice = config.say_voice or pick_say_voice() or ""
         label = f"say:{voice}" if voice else "say"
-        return MacSayTTS(voice=voice), label
-    return PrintTTS(), "print"
+        return MacSayTTS(voice=voice or None), label, voice
+    return PrintTTS(), "print", ""
 
 
-def _build_barge_in(config: Config, tts_kind: str) -> BargeInController | None:
+def _build_barge_in(config: Config, tts_kind: str, voice: str) -> BargeInController | None:
     if not config.barge_in:
         return None
-    if tts_kind != "say":
+    if not tts_kind.startswith("say"):
         print("(barge-in needs host 'say' audio output; disabled)", file=sys.stderr)
         return None
     if not _audio_capture_available():
         print("(barge-in needs the voice extra for mic capture; disabled)", file=sys.stderr)
         return None
-    return BargeInController(InterruptibleSayTTS(), MicSpeechDetector())
+    return BargeInController(InterruptibleSayTTS(voice=voice or None), MicSpeechDetector())
 
 
 def _run_voice(
     llm: LLM, robot: RobotInterface, registry: ToolRegistry, system: str, config: Config
 ) -> None:
     stt, stt_kind = _build_voice_stt(config)
-    tts, tts_kind = _build_voice_tts(config)
-    barge_in = _build_barge_in(config, tts_kind)
+    tts, tts_kind, voice = _build_voice_tts(config)
+    barge_in = _build_barge_in(config, tts_kind, voice)
     dispatcher = Dispatcher(registry, VoiceConfirmer(stt, tts))
     brain = Brain(llm, registry, dispatcher, system=system)
     reactor = SpeechReactor(robot)

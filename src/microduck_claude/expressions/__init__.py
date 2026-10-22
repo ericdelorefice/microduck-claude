@@ -82,7 +82,8 @@ def perform_gesture(robot: RobotInterface, name: str, *, pace: float = 0.0) -> G
         if not robot.do_behavior(gesture.skill):
             raise GestureUnavailableError(name)
         return gesture
-    assert gesture.run is not None  # a non-skill gesture always carries a routine
+    if gesture.run is None:  # a malformed gesture with neither a skill nor a routine
+        raise RuntimeError(f"gesture {name!r} has neither a skill nor a routine")
     target = cast(RobotInterface, _PacedRobot(robot, pace)) if pace > 0 else robot
     gesture.run(target)
     return gesture

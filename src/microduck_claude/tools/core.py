@@ -20,6 +20,7 @@ from ..expressions import (
     gesture_names,
     perform_gesture,
 )
+from ..robot import JsonRpcError
 from ..robot.interface import RobotInterface
 from .base import FunctionTool, Risk, Tool, ToolResult
 
@@ -30,15 +31,18 @@ _NO_ARGS_SCHEMA: dict[str, Any] = {
 }
 
 
+_MAX_FRAME_BYTES = 8 * 1024 * 1024  # a single camera frame, not an endless MJPEG stream
+
+
 def _capture_camera_png(url: str, *, timeout: float = 4.0) -> bytes | None:
-    """GET a single PNG frame from the duck's camera console, or None if unavailable."""
+    """GET a single image frame from the duck's camera console, or None if unavailable."""
     if not url:
         return None
     try:
         with urllib.request.urlopen(url, timeout=timeout) as response:
             if getattr(response, "status", 200) != 200:
                 return None
-            data: bytes = response.read()
+            data: bytes = response.read(_MAX_FRAME_BYTES)
     except (urllib.error.URLError, OSError, ValueError):
         return None
     return data or None
@@ -88,6 +92,8 @@ def build_core_tools(
             return ToolResult(
                 f"the duck can't do {name!r} on this body — it declined the move", ok=False
             )
+        except (JsonRpcError, OSError) as exc:
+            return ToolResult(f"couldn't reach the duck to do {name!r}: {exc}", ok=False)
         return ToolResult(f"performed gesture: {gesture.name}")
 
     def _gesture_preview(arguments: dict[str, Any]) -> str:

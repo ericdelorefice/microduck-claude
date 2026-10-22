@@ -12,9 +12,11 @@ core so the package stays dependency-light and CI needs no audio hardware.
 
 from __future__ import annotations
 
+import os
 import shutil
 import subprocess
 import sys
+import tempfile
 from collections.abc import Callable, Sequence
 from typing import TextIO
 
@@ -71,7 +73,21 @@ class MacSayTTS:
         self._runner(cmd)
 
 
-_PREFERRED_VOICES = ("Samantha", "Daniel", "Alex", "Karen", "Moira", "Fred", "Victoria", "Tom")
+# British male voices first, for a dry "narrator" character (Stanley-Parable-adjacent;
+# macOS can't do the real thing). Override with MICRODUCK_SAY_VOICE; install an Enhanced
+# en-GB voice in System Settings > Spoken Content for a closer match.
+_PREFERRED_VOICES = (
+    "Oliver",
+    "Daniel",
+    "Arthur",
+    "Samantha",
+    "Alex",
+    "Karen",
+    "Moira",
+    "Fred",
+    "Victoria",
+    "Tom",
+)
 
 
 def pick_say_voice(*, min_bytes: int = 2048) -> str | None:
@@ -81,9 +97,6 @@ def pick_say_voice(*, min_bytes: int = 2048) -> str | None:
     play as silence. We probe candidates by rendering a tiny clip and checking its size,
     so voice mode does not fall back to a silent default voice.
     """
-    import os
-    import tempfile
-
     for voice in _PREFERRED_VOICES:
         path = ""
         try:
