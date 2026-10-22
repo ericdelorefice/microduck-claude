@@ -378,10 +378,14 @@ tool text. `microduck-claude voice` runs it on the fake duck today. Remaining: a
 speech-recognition backend (e.g. faster-whisper + sounddevice) behind a `[voice]` extra, barge-in, and a
 latency pass on model choice (Sonnet/Haiku are options). Voice audio stays on the host.
 
-### Milestone 4 — Richer expression, memory, persona
-Full expression library (mirror `microduck_emotions`), optional persona profiles and long-term memory
-(à la Reachy's conversation app), and safe example tools. Personal integrations arrive via the owner's
-private plugin, never the core.
+### Milestone 4 — Richer expression, memory, persona ✅ (built)
+23 gestures including emotions (sad / angry / surprised / scared / sleepy / excited / proud / shy),
+mapped to motion + `robot.sound`. A local **long-term memory** (`memory/`): `recall_memories`
+(read-only), `remember` / `forget` (ACTIONs — gated by the confirmation gate), stored at
+`~/.microduck-claude/memory.json` (personal data, never committed; recalled as data, not instructions).
+**Persona profiles** (`brain/persona.py`: duckling / zen / scholar / grumpy) composed onto the base
+safety prompt, chosen via `MICRODUCK_PERSONA`. Personal integrations still arrive via the plugin hook,
+never the core.
 
 ### M-Audio — speak *through* the duck
 Make Claude's voice come out of the duck and its mic feed STT, behind a `DuckAudioOverSSH` backend

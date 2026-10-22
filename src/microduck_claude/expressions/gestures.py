@@ -105,6 +105,59 @@ def _sit(robot: RobotInterface) -> None:
     robot.do_behavior("sit_toggle")
 
 
+def _sad(robot: RobotInterface) -> None:
+    robot.set_head(head_pitch=0.4)  # droop
+    robot.set_pose(z=-0.02)
+    robot.play_sound("coo")
+
+
+def _angry(robot: RobotInterface) -> None:
+    robot.set_pose(pitch=0.3)  # lean in
+    robot.set_head(head_yaw=0.3)
+    robot.set_head(head_yaw=-0.3)
+    robot.set_head()
+    robot.play_sound("alarm")
+
+
+def _surprised(robot: RobotInterface) -> None:
+    robot.set_head(head_pitch=-0.4)  # jerk up
+    robot.set_pose(z=0.03)
+    robot.set_pose()
+    robot.play_sound("inquire")
+
+
+def _scared(robot: RobotInterface) -> None:
+    robot.set_pose(z=-0.03)  # shrink
+    robot.set_head(head_pitch=-0.2, head_roll=0.2)
+    robot.play_sound("alarm")
+
+
+def _sleepy(robot: RobotInterface) -> None:
+    robot.set_head(head_pitch=0.3, head_roll=0.3)
+    robot.set_mouth(0.2)
+    robot.set_mouth(0.0)
+    robot.play_sound("coo")
+
+
+def _excited(robot: RobotInterface) -> None:
+    robot.set_pose(roll=0.3)
+    robot.set_pose(roll=-0.3)
+    robot.set_pose(roll=0.3)
+    robot.set_pose()
+    robot.play_sound("wheee")
+
+
+def _proud(robot: RobotInterface) -> None:
+    robot.set_pose(z=0.03)  # puff up tall
+    robot.set_head(head_pitch=-0.2)
+    robot.play_sound("chirp")
+
+
+def _shy(robot: RobotInterface) -> None:
+    robot.set_head(head_yaw=0.4, head_pitch=0.2)  # turn away and down
+    robot.play_sound("coo")
+
+
 _ALL: tuple[Gesture, ...] = (
     Gesture("nod", "Dip the head and return — 'yes' / acknowledgement.", _nod),
     Gesture("shake", "Swivel the head side to side — 'no' / disagreement.", _shake),
@@ -121,6 +174,14 @@ _ALL: tuple[Gesture, ...] = (
     Gesture("confused", "Tilt and glance about with a puzzled chirp.", _confused),
     Gesture("dance", "A short celebratory wiggle with a sound.", _dance),
     Gesture("sit", "Toggle between sitting and standing.", _sit),
+    Gesture("sad", "Droop the head and sink a little, with a soft sound.", _sad),
+    Gesture("angry", "Lean in and shake, with an alarmed sound.", _angry),
+    Gesture("surprised", "Jerk the head up and rise, with a surprised chirp.", _surprised),
+    Gesture("scared", "Shrink down and back, with an alarmed sound.", _scared),
+    Gesture("sleepy", "Let the head droop, with a sleepy coo.", _sleepy),
+    Gesture("excited", "Bounce side to side, with an excited sound.", _excited),
+    Gesture("proud", "Puff up tall, with a proud chirp.", _proud),
+    Gesture("shy", "Turn the head away and down, with a shy coo.", _shy),
 )
 
 GESTURES: dict[str, Gesture] = {gesture.name: gesture for gesture in _ALL}
