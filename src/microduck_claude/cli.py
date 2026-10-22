@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import importlib.util
 import os
 import sys
 import webbrowser
@@ -15,10 +16,12 @@ from .robot import FakeRobot, JsonRpcError, RobotCall, RobotInterface, build_rob
 from .safety import Dispatcher
 from .tools import ToolRegistry
 from .voice import (
+    FasterWhisperSTT,
     MacSayTTS,
     MacSayWavRenderer,
     PrintTTS,
     SpeechReactor,
+    SpeechToText,
     SshDuckAudio,
     SshDuckTTS,
     SshTarget,
@@ -157,6 +160,25 @@ def _run_chat(
                 print(f"      🦆 {summary}")
 
 
+def _mic_stt_available() -> bool:
+    return all(
+        importlib.util.find_spec(mod) is not None
+        for mod in ("faster_whisper", "sounddevice", "numpy")
+    )
+
+
+def _build_voice_stt(config: Config) -> tuple[SpeechToText, str]:
+    """Pick the voice input: typed stdin (default), or the microphone (needs [voice])."""
+    if config.voice_input == "mic":
+        if _mic_stt_available():
+            return FasterWhisperSTT(model_size=config.stt_model), "mic:faster-whisper"
+        print(
+            "(mic STT needs the voice extra — `pip install -e '.[voice]'`; using typed input)",
+            file=sys.stderr,
+        )
+    return StdinSTT(), "stdin"
+
+
 def _build_voice_tts(config: Config) -> tuple[TextToSpeech, str]:
     """Pick the voice output: the Mac speaker, or (validate-on-hardware) the duck."""
     if config.voice_output == "duck" and config.duck_ssh_host:
@@ -170,16 +192,16 @@ def _build_voice_tts(config: Config) -> tuple[TextToSpeech, str]:
 def _run_voice(
     llm: LLM, robot: RobotInterface, registry: ToolRegistry, system: str, config: Config
 ) -> None:
-    stt = StdinSTT()
+    stt, stt_kind = _build_voice_stt(config)
     tts, tts_kind = _build_voice_tts(config)
     dispatcher = Dispatcher(registry, VoiceConfirmer(stt, tts))
     brain = Brain(llm, registry, dispatcher, system=system)
     reactor = SpeechReactor(robot)
 
+    how = "Speak into your mic" if stt_kind.startswith("mic") else "Speak by typing a line"
     print(
-        f"🦆  Voice mode (backend={config.robot_backend}, tts={tts_kind}, "
-        f"model={config.model}, persona={config.persona}). Speak by typing a line; "
-        "Ctrl-D to quit.\n"
+        f"🦆  Voice mode (in={stt_kind}, out={tts_kind}, model={config.model}, "
+        f"persona={config.persona}). {how}; Ctrl-D to quit.\n"
     )
     VoiceLoop(brain, stt, tts, reactor).run()
 

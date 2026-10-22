@@ -24,7 +24,8 @@ project adds the conversational layer on top, in the style of Pollen's Reachy Mi
   or hardware when available.
 - **Milestone 3 (done):** a host **voice loop** — swappable STT/TTS, the duck reacting with motion +
   chirps, and spoken yes/no action confirmation. `microduck-claude voice` runs it on the fake duck today
-  (type to "speak", hear replies via macOS `say`); a real microphone backend plugs in behind the interface.
+  (type to "speak", hear replies via macOS `say`); a **real on-device microphone backend** (faster-whisper)
+  is available via the `[voice]` extra with `MICRODUCK_VOICE_INPUT=mic`.
 - **Playground (done):** `microduck-claude playground` opens a local web page that visualizes the fake
   duck live (head, beak, pose, chirps) with a chat box and gesture-preview buttons — a hardware-free
   test area, no robot required.
@@ -95,6 +96,8 @@ runs after you confirm it**.
 | `MICRODUCK_VOICE_OUTPUT` | `host` | `host` (Mac speaker) or `duck` (speak through the duck via SSH). |
 | `MICRODUCK_DUCK_SSH_HOST` | — | Duck's SSH host for `voice_output=duck` (auth via your own SSH keys). |
 | `MICRODUCK_DUCK_AUDIO_DEVICE` | `plughw:aic3104` | Duck ALSA device (`default` on the beta board). |
+| `MICRODUCK_VOICE_INPUT` | `stdin` | `stdin` (typed) or `mic` (microphone STT; needs `pip install '.[voice]'`). |
+| `MICRODUCK_STT_MODEL` | `base.en` | faster-whisper model for mic STT (e.g. `small.en`, `base`). |
 | `MICRODUCK_CLAUDE_MAX_TOKENS` | `4096` | Max response tokens. |
 | `MICRODUCK_ROBOT_BACKEND` | `fake` | `fake` (in-process) or `rpc` (real duck-sim / robot). |
 | `MICRODUCK_ROBOT_SOCKET` | `~/.cache/duck-sim/duck-a.sock` | Unix socket for the `rpc` backend. |
@@ -106,9 +109,10 @@ runs after you confirm it**.
 microduck-claude voice
 ```
 
-Talk to the duck out loud — well, type a line as your "speech" for now; a real microphone backend plugs
-in behind the `SpeechToText` interface. Claude's replies are spoken via the macOS `say` command (or
-printed if `say` isn't available), and the duck reacts with motion + chirps. **Actions are confirmed by
+Talk to the duck. By default you type a line as your "speech"; install the voice extra
+(`pip install -e '.[voice]'`) and set `MICRODUCK_VOICE_INPUT=mic` for a **real microphone** (on-device
+faster-whisper, no cloud). Claude's replies are spoken via the macOS `say` command (or printed if `say`
+isn't available), and the duck reacts with motion + chirps. **Actions are confirmed by
 a spoken yes/no**, captured from the live mic only — a "yes" in the model's text or a tool result can
 never confirm one.
 

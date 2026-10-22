@@ -32,6 +32,12 @@ dev = [
     "mypy>=1.8",
     "pytest>=8.0",
 ]
+# Optional local microphone speech-to-text (Apple Silicon friendly; permissive deps).
+voice = [
+    "faster-whisper>=1.2",
+    "sounddevice>=0.5",
+    "numpy>=1.24",
+]
 
 [project.scripts]
 microduck-claude = "microduck_claude.cli:main"
@@ -71,6 +77,11 @@ warn_unused_configs = true
 # the client, so mypy need not resolve its stubs.
 [[tool.mypy.overrides]]
 module = ["anthropic.*"]
+ignore_missing_imports = true
+
+# Optional voice-extra deps — imported lazily; not installed in the dev/CI env.
+[[tool.mypy.overrides]]
+module = ["numpy", "sounddevice", "faster_whisper"]
 ignore_missing_imports = true
 
 # Tests use dynamic fakes and pytest-style functions; relax annotation requirements.
