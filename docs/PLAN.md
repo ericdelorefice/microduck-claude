@@ -374,9 +374,11 @@ drop-in. Contract/integration tests against the sim; handle `IntentResult{accept
 `SpeechToText` / `TextToSpeech` interfaces with light host backends (stdin stand-in, `PrintTTS`, macOS
 `say`), a `VoiceLoop` orchestrator, a `SpeechReactor` (bounded expressive motion + chirps), and a
 `VoiceConfirmer` that gates actions by spoken yes/no — consulting **only the live mic**, never model or
-tool text. `microduck-claude voice` runs it on the fake duck today. Remaining: a real microphone +
-speech-recognition backend (e.g. faster-whisper + sounddevice) behind a `[voice]` extra, barge-in, and a
-latency pass on model choice (Sonnet/Haiku are options). Voice audio stays on the host.
+tool text. `microduck-claude voice` runs it today, with a **real on-device microphone backend** available via the
+`[voice]` extra (`FasterWhisperSTT`: sounddevice + faster-whisper — MIT, no torch, Apple-Silicon friendly,
+built-in Silero VAD; `MICRODUCK_VOICE_INPUT=mic`). Chosen after a 2026 survey of STT/VAD options (over
+mlx-whisper / whisper.cpp / vosk, and avoiding TEN-VAD's non-compete licence). Remaining: barge-in
+(duck-then-confirm, host path only) and a latency pass on model choice. Voice audio stays on the host.
 
 ### Milestone 4 — Richer expression, memory, persona ✅ (built)
 23 gestures including emotions (sad / angry / surprised / scared / sleepy / excited / proud / shy),

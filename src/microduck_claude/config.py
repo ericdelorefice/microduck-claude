@@ -30,6 +30,8 @@ class Config:
     duck_ssh_host: str = ""
     duck_audio_device: str = "plughw:aic3104"
     duck_ssh_user: str = "microduck"
+    voice_input: str = "stdin"  # "stdin" (typed) | "mic" (microphone STT; needs the [voice] extra)
+    stt_model: str = "base.en"
 
     @classmethod
     def from_env(cls) -> Config:
@@ -53,6 +55,8 @@ class Config:
             duck_ssh_host=os.environ.get("MICRODUCK_DUCK_SSH_HOST", ""),
             duck_audio_device=os.environ.get("MICRODUCK_DUCK_AUDIO_DEVICE", "plughw:aic3104"),
             duck_ssh_user=os.environ.get("MICRODUCK_DUCK_SSH_USER", "microduck"),
+            voice_input=os.environ.get("MICRODUCK_VOICE_INPUT", "stdin").lower(),
+            stt_model=os.environ.get("MICRODUCK_STT_MODEL", "base.en"),
         )
 
 

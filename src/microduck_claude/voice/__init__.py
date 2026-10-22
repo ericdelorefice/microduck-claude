@@ -8,8 +8,10 @@ from .interfaces import SpeechToText, TextToSpeech, Utterance
 from .loop import VoiceLoop
 from .reactions import SpeechReactor
 from .ssh_audio import MacSayWavRenderer, SshDuckAudio, SshDuckTTS, SshTarget
+from .stt_whisper import FasterWhisperSTT
 
 __all__ = [
+    "FasterWhisperSTT",
     "MacSayTTS",
     "MacSayWavRenderer",
     "PrintTTS",
