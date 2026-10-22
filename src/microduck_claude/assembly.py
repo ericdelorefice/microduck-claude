@@ -17,11 +17,12 @@ def build_registry(
     memory: MemoryStore | None = None,
     providers: Iterable[ToolProvider] | None = None,
     include_installed_plugins: bool = False,
+    gesture_pace: float = 0.0,
 ) -> ToolRegistry:
     """Assemble the allow-list: core tools, optional memory tools, and any supplied
     or installed providers. Everything beyond the core tools is opt-in."""
     registry = ToolRegistry()
-    for tool in build_core_tools(robot):
+    for tool in build_core_tools(robot, gesture_pace=gesture_pace):
         registry.register(tool)
     if memory is not None:
         for tool in build_memory_tools(memory):

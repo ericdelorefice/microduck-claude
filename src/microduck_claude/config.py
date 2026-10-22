@@ -27,6 +27,7 @@ class Config:
     robot_socket: str = DEFAULT_SIM_SOCKET
     api_version: int = API_VERSION
     voice_output: str = "host"  # "host" (Mac speaker) | "duck" (speak through the duck via SSH)
+    say_voice: str = ""  # macOS 'say' voice (e.g. "Daniel"); empty = auto-pick a working one
     duck_ssh_host: str = ""
     duck_audio_device: str = "plughw:aic3104"
     duck_ssh_user: str = "microduck"
@@ -53,6 +54,7 @@ class Config:
             robot_socket=os.environ.get("MICRODUCK_ROBOT_SOCKET", DEFAULT_SIM_SOCKET),
             api_version=_int_env("MICRODUCK_API_VERSION", API_VERSION),
             voice_output=os.environ.get("MICRODUCK_VOICE_OUTPUT", "host").lower(),
+            say_voice=os.environ.get("MICRODUCK_SAY_VOICE", ""),
             duck_ssh_host=os.environ.get("MICRODUCK_DUCK_SSH_HOST", ""),
             duck_audio_device=os.environ.get("MICRODUCK_DUCK_AUDIO_DEVICE", "plughw:aic3104"),
             duck_ssh_user=os.environ.get("MICRODUCK_DUCK_SSH_USER", "microduck"),

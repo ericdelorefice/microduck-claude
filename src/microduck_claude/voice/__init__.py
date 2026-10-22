@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from .backends import MacSayTTS, PrintTTS, StdinSTT
+from .backends import MacSayTTS, PrintTTS, StdinSTT, pick_say_voice
 from .bargein import BargeInController, InterruptibleSayTTS, MicSpeechDetector
 from .confirm import VoiceConfirmer
 from .interfaces import SpeechToText, TextToSpeech, Utterance
@@ -27,6 +27,7 @@ __all__ = [
     "StdinSTT",
     "TextToSpeech",
     "Utterance",
+    "pick_say_voice",
     "VoiceConfirmer",
     "VoiceLoop",
 ]

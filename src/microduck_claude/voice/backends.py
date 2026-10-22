@@ -69,3 +69,37 @@ class MacSayTTS:
             cmd += ["-v", self._voice]
         cmd.append(text)
         self._runner(cmd)
+
+
+_PREFERRED_VOICES = ("Samantha", "Daniel", "Alex", "Karen", "Moira", "Fred", "Victoria", "Tom")
+
+
+def pick_say_voice(*, min_bytes: int = 2048) -> str | None:
+    """Return the first macOS ``say`` voice that actually synthesizes audio, or None.
+
+    macOS lists voices whose data is not installed; those render a near-empty file and
+    play as silence. We probe candidates by rendering a tiny clip and checking its size,
+    so voice mode does not fall back to a silent default voice.
+    """
+    import os
+    import tempfile
+
+    for voice in _PREFERRED_VOICES:
+        path = ""
+        try:
+            with tempfile.NamedTemporaryFile(suffix=".aiff", delete=False) as handle:
+                path = handle.name
+            subprocess.run(
+                ["say", "-v", voice, "-o", path, "probe"],
+                check=False,
+                capture_output=True,
+                timeout=10,
+            )
+            if os.path.getsize(path) >= min_bytes:
+                return voice
+        except (OSError, subprocess.SubprocessError):
+            continue
+        finally:
+            if path and os.path.exists(path):
+                os.unlink(path)
+    return None

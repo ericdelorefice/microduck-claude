@@ -11,7 +11,13 @@ import json
 from datetime import datetime
 from typing import Any
 
-from ..expressions import UnknownGestureError, gesture_catalog, gesture_names, perform_gesture
+from ..expressions import (
+    GestureUnavailableError,
+    UnknownGestureError,
+    gesture_catalog,
+    gesture_names,
+    perform_gesture,
+)
 from ..robot.interface import RobotInterface
 from .base import FunctionTool, Risk, Tool, ToolResult
 
@@ -22,8 +28,12 @@ _NO_ARGS_SCHEMA: dict[str, Any] = {
 }
 
 
-def build_core_tools(robot: RobotInterface) -> list[Tool]:
-    """Build the core tool set, bound to a particular robot."""
+def build_core_tools(robot: RobotInterface, *, gesture_pace: float = 0.0) -> list[Tool]:
+    """Build the core tool set, bound to a particular robot.
+
+    ``gesture_pace`` holds each gesture step for that many seconds so motion is visible
+    on a real body; it defaults to 0 (instant) for the FakeRobot and tests.
+    """
 
     def _get_time(_: dict[str, Any]) -> ToolResult:
         return ToolResult(datetime.now().astimezone().strftime("%A %Y-%m-%d %H:%M:%S %Z"))
@@ -40,15 +50,19 @@ def build_core_tools(robot: RobotInterface) -> list[Tool]:
         if not isinstance(name, str):
             return ToolResult("missing required string argument 'gesture'", ok=False)
         try:
-            gesture = perform_gesture(robot, name)
+            gesture = perform_gesture(robot, name, pace=gesture_pace)
         except UnknownGestureError:
             return ToolResult(
                 f"unknown gesture {name!r}; call list_gestures for valid names", ok=False
             )
+        except GestureUnavailableError:
+            return ToolResult(
+                f"the duck can't do {name!r} on this body — it declined the move", ok=False
+            )
         return ToolResult(f"performed gesture: {gesture.name}")
 
     def _gesture_preview(arguments: dict[str, Any]) -> str:
-        return f"perform the gesture {arguments.get('gesture')!r}"
+        return f"do a little {arguments.get('gesture')}"
 
     gesture_schema: dict[str, Any] = {
         "type": "object",

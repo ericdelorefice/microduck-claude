@@ -32,6 +32,7 @@ from .voice import (
     TextToSpeech,
     VoiceConfirmer,
     VoiceLoop,
+    pick_say_voice,
 )
 
 
@@ -112,7 +113,10 @@ def _run(*, voice: bool) -> int:
         return 1
 
     memory = MemoryStore(config.memory_path)
-    registry = build_registry(robot, memory=memory)
+    # Hold each gesture step briefly on a real body (the sim) so motion is visible;
+    # the in-process FakeRobot stays instant.
+    gesture_pace = 0.35 if config.robot_backend == "rpc" else 0.0
+    registry = build_registry(robot, memory=memory, gesture_pace=gesture_pace)
     system = system_prompt_for(config.persona)
     try:
         if voice:
@@ -192,7 +196,9 @@ def _build_voice_tts(config: Config) -> tuple[TextToSpeech, str]:
         target = SshTarget(config.duck_ssh_host, config.duck_audio_device, config.duck_ssh_user)
         return SshDuckTTS(MacSayWavRenderer(), SshDuckAudio(target)), f"duck@{config.duck_ssh_host}"
     if MacSayTTS.available():
-        return MacSayTTS(), "say"
+        voice = config.say_voice or pick_say_voice()
+        label = f"say:{voice}" if voice else "say"
+        return MacSayTTS(voice=voice), label
     return PrintTTS(), "print"
 
 

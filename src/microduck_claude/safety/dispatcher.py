@@ -102,8 +102,8 @@ class Dispatcher:
     def _prompt(self, tool: Tool, arguments: dict[str, Any]) -> str:
         preview = getattr(tool, "preview", None)
         if callable(preview):
-            return f"The duck will {preview(arguments)}. Allow it?"
-        return f"Allow the action {tool.name!r}? arguments={arguments!r}"
+            return f"May I {preview(arguments)}?"
+        return f"May I run the action {tool.name!r} with arguments {arguments!r}?"
 
     def _record(
         self,
