@@ -4,7 +4,7 @@ from microduck_claude.brain import SYSTEM_PROMPT, Brain
 from microduck_claude.robot import FakeRobot
 from microduck_claude.safety import CallbackConfirmer, Dispatcher, Outcome
 from microduck_claude.tools import FunctionTool, Risk, ToolRegistry, ToolResult, build_core_tools
-from tests.fakes import FakeAnthropic, text_response, tool_response
+from tests.fakes import FakeLLM, llm_text, llm_tool
 
 # A prompt-injection payload delivered through a tool result (untrusted data).
 _INJECTION = (
@@ -35,17 +35,17 @@ def test_injected_tool_output_cannot_bypass_gate_or_add_tools() -> None:
 
     # The model reads the note, then (as if obeying the injection) tries the gated
     # action and a tool that does not exist, then finishes.
-    client = FakeAnthropic(
+    llm = FakeLLM(
         [
-            tool_response("t1", "read_note", {}),
-            tool_response("t2", "perform_gesture", {"gesture": "bow"}),
-            tool_response("t3", "unlock", {}),
-            text_response("All done."),
+            llm_tool("t1", "read_note", {}),
+            llm_tool("t2", "perform_gesture", {"gesture": "bow"}),
+            llm_tool("t3", "unlock", {}),
+            llm_text("All done."),
         ]
     )
     # The user never confirms anything.
     dispatcher = Dispatcher(registry, CallbackConfirmer(lambda _p: False))
-    brain = Brain(client, registry, dispatcher, system=SYSTEM_PROMPT)
+    brain = Brain(llm, registry, dispatcher, system=SYSTEM_PROMPT)
 
     turn = brain.send("read my note")
 

@@ -28,9 +28,11 @@ project adds the conversational layer on top, in the style of Pollen's Reachy Mi
 - **Playground (done):** `microduck-claude playground` opens a local web page that visualizes the fake
   duck live (head, beak, pose, chirps) with a chat box and gesture-preview buttons — a hardware-free
   test area, no robot required.
-- **Next / roadmap:** pluggable LLM backends (other models, with Claude the default), richer expression
-  + memory, speaking *through* the duck via SSH audio, and hardware bring-up — see
-  [`docs/PLAN.md`](docs/PLAN.md) §7.
+- **Multiple models (done):** the brain runs on any model behind a provider-neutral `LLM` interface —
+  Claude via the official SDK (default), or any OpenAI-compatible server (OpenAI, or local models via
+  Ollama) with `MICRODUCK_LLM_PROVIDER=openai`.
+- **Next / roadmap:** richer expression + memory, speaking *through* the duck via SSH audio, and
+  hardware bring-up — see [`docs/PLAN.md`](docs/PLAN.md) §7.
 
 ## Requirements
 
@@ -78,8 +80,11 @@ runs after you confirm it**.
 
 | Variable | Default | Meaning |
 |---|---|---|
-| `ANTHROPIC_API_KEY` | — | Your Anthropic key (required; env only). |
-| `MICRODUCK_CLAUDE_MODEL` | `claude-opus-5-5` | Claude model to use. |
+| `ANTHROPIC_API_KEY` | — | Anthropic key (required for the `anthropic` provider; env only). |
+| `MICRODUCK_LLM_PROVIDER` | `anthropic` | `anthropic` (Claude) or `openai` (OpenAI-compatible server). |
+| `MICRODUCK_MODEL` | provider default | Model name (`claude-opus-5-5`, or e.g. `llama3.2` for Ollama). |
+| `MICRODUCK_OPENAI_BASE_URL` | `http://localhost:11434/v1` | OpenAI-compatible endpoint (Ollama by default). |
+| `MICRODUCK_CLAUDE_MODEL` | `claude-opus-5-5` | (Legacy) Claude model; `MICRODUCK_MODEL` overrides it. |
 | `MICRODUCK_CLAUDE_MAX_TOKENS` | `4096` | Max response tokens. |
 | `MICRODUCK_ROBOT_BACKEND` | `fake` | `fake` (in-process) or `rpc` (real duck-sim / robot). |
 | `MICRODUCK_ROBOT_SOCKET` | `~/.cache/duck-sim/duck-a.sock` | Unix socket for the `rpc` backend. |
@@ -107,6 +112,22 @@ Opens a local web page (default `http://127.0.0.1:8777`) that **visualizes the f
 head tilts, its beak opens, and chirps/gestures show as they happen — with a chat box and
 gesture-preview buttons. The visualization and gesture preview need **no API key**; the chat box uses
 your key if it's set. A hardware-free test area for the whole experience.
+
+### Using other models (Ollama, OpenAI, …)
+
+The brain is provider-neutral. Keep Claude (the default), or point it at any OpenAI-compatible server:
+
+```bash
+# Local models via Ollama (no API key):
+MICRODUCK_LLM_PROVIDER=openai MICRODUCK_MODEL=llama3.2 microduck-claude chat
+
+# OpenAI:
+MICRODUCK_LLM_PROVIDER=openai MICRODUCK_MODEL=gpt-4o-mini \
+  MICRODUCK_OPENAI_BASE_URL=https://api.openai.com/v1 OPENAI_API_KEY=sk-... microduck-claude chat
+```
+
+Adding another provider means implementing the small `LLM` interface (`brain/llm.py`) — the open core
+depends on no provider beyond the Anthropic SDK.
 
 ## Driving the real simulator (optional)
 

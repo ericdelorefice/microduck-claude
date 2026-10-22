@@ -18,16 +18,25 @@ DEFAULT_MAX_TOKENS = 4096
 
 @dataclass(frozen=True)
 class Config:
+    llm_provider: str = "anthropic"  # "anthropic" (default) | "openai"
     model: str = DEFAULT_MODEL
     max_tokens: int = DEFAULT_MAX_TOKENS
-    robot_backend: str = "fake"  # "fake" (in-process) | "rpc" (duck-sim / robot)
+    robot_backend: str = "fake"  # "fake" (in-process) | "rpc" (real duck-sim / robot)
     robot_socket: str = DEFAULT_SIM_SOCKET
     api_version: int = API_VERSION
 
     @classmethod
     def from_env(cls) -> Config:
+        provider = os.environ.get("MICRODUCK_LLM_PROVIDER", "anthropic").lower()
+        default_model = DEFAULT_MODEL if provider == "anthropic" else "llama3.2"
+        model = (
+            os.environ.get("MICRODUCK_MODEL")
+            or os.environ.get("MICRODUCK_CLAUDE_MODEL")
+            or default_model
+        )
         return cls(
-            model=os.environ.get("MICRODUCK_CLAUDE_MODEL", DEFAULT_MODEL),
+            llm_provider=provider,
+            model=model,
             max_tokens=_int_env("MICRODUCK_CLAUDE_MAX_TOKENS", DEFAULT_MAX_TOKENS),
             robot_backend=os.environ.get("MICRODUCK_ROBOT_BACKEND", "fake").lower(),
             robot_socket=os.environ.get("MICRODUCK_ROBOT_SOCKET", DEFAULT_SIM_SOCKET),

@@ -396,13 +396,14 @@ from the environment; nothing committed.
 When hardware arrives (~Q1 2027): the same `RpcRobot` over SSH-forwarded socket or the rendezvous lane,
 safety re-validated on a body that can actually move, conservative speed/zone limits first.
 
-### Milestone — Pluggable LLM backends (provider-agnostic brain)
-Let the brain run on other models/providers, not only Claude. Introduce an `LLM` interface the
-conversation loop depends on (chat + tool-use normalized to a provider-neutral shape), with the Anthropic
-SDK as the **built-in default and reference**, and other providers (OpenAI, Gemini, local models via
-Ollama / llama.cpp, etc.) as **optional adapters behind extras** — the open core never depends on them.
-Tools, the safety gate, expressions, robot, and voice are already provider-agnostic, so only the brain
-changes. Claude stays the recommended default.
+### Milestone — Pluggable LLM backends (provider-agnostic brain) ✅ (built)
+The brain depends on a provider-neutral `LLM` interface (`brain/llm.py`): `start` / `send_user` /
+`send_tool_results`, with chat + tool use normalized across providers. Adapters own their own
+conversation state: `AnthropicLLM` (Claude via the official SDK — the built-in default and reference) and
+`OpenAICompatLLM` (stdlib HTTP to any OpenAI-compatible server — OpenAI, or local models via Ollama /
+llama.cpp — no new dependency). `build_llm` selects via `MICRODUCK_LLM_PROVIDER`. Tools, the safety gate,
+expressions, robot, and voice were already provider-agnostic, so only the brain changed; Claude stays the
+recommended default. Next: a Gemini adapter and streaming.
 
 ### Milestone — Local playground / test console ✅ (built)
 `microduck-claude playground` serves a local web page (stdlib HTTP server, no new deps) that visualizes

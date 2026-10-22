@@ -10,6 +10,7 @@ from __future__ import annotations
 from dataclasses import dataclass, field
 from typing import Any
 
+from microduck_claude.brain import LLMResponse, ToolCall
 from microduck_claude.voice.interfaces import Utterance
 
 
@@ -34,7 +35,10 @@ class FakeMessages:
         self.calls: list[dict[str, Any]] = []
 
     def create(self, **kwargs: Any) -> FakeResponse:
-        self.calls.append(kwargs)
+        recorded = dict(kwargs)
+        if "messages" in recorded:
+            recorded["messages"] = list(recorded["messages"])  # snapshot; the list grows later
+        self.calls.append(recorded)
         if not self._responses:
             raise AssertionError("messages.create called more times than scripted")
         return self._responses.pop(0)
@@ -100,3 +104,41 @@ class FakeTTS:
 
     def speak(self, text: str) -> None:
         self.spoken.append(text)
+
+
+class FakeLLM:
+    """A scripted, provider-neutral LLM for testing the brain loop in isolation."""
+
+    def __init__(self, responses: list[LLMResponse]) -> None:
+        self._responses = list(responses)
+        self.started: dict[str, Any] | None = None
+
+    def start(self, system: str, tools: list[dict[str, Any]]) -> None:
+        self.started = {"system": system, "tools": tools}
+
+    def send_user(self, text: str) -> LLMResponse:
+        return self._next()
+
+    def send_tool_results(self, results: list[Any]) -> LLMResponse:
+        return self._next()
+
+    def _next(self) -> LLMResponse:
+        if not self._responses:
+            raise AssertionError("LLM called more times than scripted")
+        return self._responses.pop(0)
+
+
+def llm_text(text: str) -> LLMResponse:
+    return LLMResponse(texts=[text])
+
+
+def llm_tool(
+    call_id: str, name: str, tool_input: dict[str, Any], text: str | None = None
+) -> LLMResponse:
+    return LLMResponse(
+        texts=[text] if text else [], tool_calls=[ToolCall(call_id, name, tool_input)]
+    )
+
+
+def llm_refusal() -> LLMResponse:
+    return LLMResponse(refused=True)
