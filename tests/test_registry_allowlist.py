@@ -21,6 +21,7 @@ def test_core_tools_registered() -> None:
         "list_gestures",
         "get_robot_status",
         "see",
+        "look_around",
         "perform_gesture",
     }
 

@@ -44,3 +44,23 @@ def test_anthropic_tool_result_includes_the_image_block() -> None:
     assert image_block["type"] == "image"
     assert image_block["source"]["media_type"] == "image/png"
     assert base64.b64decode(image_block["source"]["data"]) == b"PNGBYTES"
+
+
+def test_look_around_sweeps_and_returns_a_view(monkeypatch: pytest.MonkeyPatch) -> None:
+    monkeypatch.setattr(tools_core, "_capture_camera_png", lambda url, **kw: b"\x89PNG-view")
+    robot = FakeRobot()
+    tool = build_registry(robot, camera_url="http://cam/frame").get("look_around")
+    assert tool is not None
+    result = tool.run({})
+    assert result.ok
+    assert result.image_png == b"\x89PNG-view"
+    assert any(c.method == "set_head" for c in robot.calls)  # it actually looked around
+
+
+def test_look_around_is_honest_without_a_camera(monkeypatch: pytest.MonkeyPatch) -> None:
+    monkeypatch.setattr(tools_core, "_capture_camera_png", lambda url, **kw: None)
+    tool = build_registry(FakeRobot(), camera_url="").get("look_around")
+    assert tool is not None
+    result = tool.run({})
+    assert not result.ok
+    assert result.image_png is None

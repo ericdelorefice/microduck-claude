@@ -8,6 +8,7 @@ NOT here — they belong in a private tool provider (see plugins/), never the co
 from __future__ import annotations
 
 import json
+import time
 import urllib.error
 import urllib.request
 from datetime import datetime
@@ -78,6 +79,28 @@ def build_core_tools(
             )
         return ToolResult("Here is what the duck's camera sees right now.", image_png=png)
 
+    def _look_around(_: dict[str, Any]) -> ToolResult:
+        # Looking is perception, not a gated action — the head movement is just how the duck
+        # looks around (like turning to see), so this stays read-only, like `see`.
+        for head_yaw in (-0.5, 0.0, 0.5):
+            robot.set_head(head_yaw=head_yaw, head_pitch=-0.2)  # sweep, gaze lifted off the floor
+            if gesture_pace:
+                time.sleep(gesture_pace)
+        robot.set_head(head_pitch=-0.2)  # settle facing forward, looking up a little
+        if gesture_pace:
+            time.sleep(gesture_pace)
+        png = _capture_camera_png(camera_url)
+        if png is None:
+            return ToolResult(
+                "I looked around, but my camera isn't available right now "
+                "(run the sim with DUCK_SIM_CAMERAS=a, or check the camera is streaming).",
+                ok=False,
+            )
+        return ToolResult(
+            "I looked around — here's the view ahead after sweeping left and right.",
+            image_png=png,
+        )
+
     def _perform_gesture(arguments: dict[str, Any]) -> ToolResult:
         name = arguments.get("gesture")
         if not isinstance(name, str):
@@ -140,6 +163,14 @@ def build_core_tools(
             Risk.READ_ONLY,
             _NO_ARGS_SCHEMA,
             _see,
+        ),
+        FunctionTool(
+            "look_around",
+            "Look around (sweep the head left and right) and report what the duck sees — "
+            "use it to get your bearings or when asked what's nearby.",
+            Risk.READ_ONLY,
+            _NO_ARGS_SCHEMA,
+            _look_around,
         ),
         FunctionTool(
             "perform_gesture",
