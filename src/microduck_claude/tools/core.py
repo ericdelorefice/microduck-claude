@@ -123,21 +123,23 @@ def build_core_tools(
         return f"do a little {arguments.get('gesture')}"
 
     def _explore(_: dict[str, Any]) -> ToolResult:
-        # A bounded, safe autonomous roam: a few slow forward hops, looking between each.
+        # A bounded, safe autonomous roam: two short forward legs, looking between them.
         # The caps live here (not with the model), and the duck always stops at the end.
-        # Sim-safe as written; a physical robot needs hardware limits (speed cap, tilt/bump
-        # stop, a kill) before it roams a real room — see docs/PLAN.md.
+        # The walk policy needs the move intent *sustained* for a couple of seconds to take
+        # real steps — robotd expires an intent ~500 ms after they stop arriving, so we resend
+        # at 10 Hz (that same expiry also stops the duck on its own). Sim-safe as written; a
+        # physical robot needs hardware limits (speed cap, tilt/bump stop, a kill) first — PLAN.
         try:
-            for _hop in range(3):
-                if gesture_pace:  # a real body: stream the velocity briefly to actually move
-                    deadline = time.monotonic() + 0.6
+            for _leg in range(2):
+                if gesture_pace:  # a real body: sustain the velocity so the policy actually walks
+                    deadline = time.monotonic() + 2.0
                     while time.monotonic() < deadline:
                         robot.drive(vx=0.15, vy=0.0, vyaw=0.0)
-                        time.sleep(0.05)
+                        time.sleep(0.1)
                 else:  # FakeRobot / tests: record one intent, no streaming
                     robot.drive(vx=0.15, vy=0.0, vyaw=0.0)
                 robot.stop()
-                robot.set_head(head_pitch=-0.2)  # look ahead after the hop
+                robot.set_head(head_pitch=-0.2)  # look ahead after the leg
                 if gesture_pace:
                     time.sleep(gesture_pace)
         finally:
