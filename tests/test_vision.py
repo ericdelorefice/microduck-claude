@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import base64
+from typing import cast
 
 import pytest
 
@@ -83,5 +84,50 @@ def test_explore_roams_and_always_stops(monkeypatch: pytest.MonkeyPatch) -> None
 def test_explore_is_a_gated_action() -> None:
     # explore moves the body, so it is an ACTION (gated), unlike the read-only look_around.
     tool = build_registry(FakeRobot(), camera_url="http://cam/frame").get("explore")
+    assert tool is not None
+    assert tool.risk is Risk.ACTION
+
+
+def test_turn_rotates_in_place_and_always_stops(monkeypatch: pytest.MonkeyPatch) -> None:
+    monkeypatch.setattr(tools_core, "_capture_camera_png", lambda url, **kw: b"\x89PNG-turn")
+    robot = FakeRobot()
+    tool = build_registry(robot, camera_url="http://cam/frame").get("turn")
+    assert tool is not None
+    result = tool.run({"degrees": 60})
+    assert result.ok
+    assert result.image_png == b"\x89PNG-turn"
+    methods = [c.method for c in robot.calls]
+    assert "drive" in methods and "stop" in methods
+    last_drive = max(i for i, c in enumerate(robot.calls) if c.method == "drive")
+    last_stop = max(i for i, c in enumerate(robot.calls) if c.method == "stop")
+    assert last_stop > last_drive  # stopped after driving — never left the duck turning
+    drives = [c for c in robot.calls if c.method == "drive"]
+    # a turn in place: yaw is set, with no forward or sideways velocity
+    assert any(
+        c.kwargs["vyaw"] != 0.0 and c.kwargs["vx"] == 0.0 and c.kwargs["vy"] == 0.0 for c in drives
+    )
+
+
+def test_turn_direction_follows_the_sign() -> None:
+    left, right = FakeRobot(), FakeRobot()
+    lt = build_registry(left, camera_url="http://cam/frame").get("turn")
+    rt = build_registry(right, camera_url="http://cam/frame").get("turn")
+    assert lt is not None and rt is not None
+    lt.run({"degrees": 45})
+    rt.run({"degrees": -45})
+    left_yaw = cast(float, next(c.kwargs["vyaw"] for c in left.calls if c.method == "drive"))
+    right_yaw = cast(float, next(c.kwargs["vyaw"] for c in right.calls if c.method == "drive"))
+    assert left_yaw > 0 and right_yaw < 0  # positive degrees = left (CCW)
+
+
+def test_turn_rejects_non_numeric_degrees() -> None:
+    tool = build_registry(FakeRobot(), camera_url="http://cam/frame").get("turn")
+    assert tool is not None
+    result = tool.run({"degrees": "a lot"})
+    assert not result.ok
+
+
+def test_turn_is_a_gated_action() -> None:
+    tool = build_registry(FakeRobot(), camera_url="http://cam/frame").get("turn")
     assert tool is not None
     assert tool.risk is Risk.ACTION

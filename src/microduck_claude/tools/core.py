@@ -34,6 +34,14 @@ _NO_ARGS_SCHEMA: dict[str, Any] = {
 
 _MAX_FRAME_BYTES = 8 * 1024 * 1024  # a single camera frame, not an endless MJPEG stream
 
+# Turning is a gait, not an instant pivot: the walk policy needs the yaw intent SUSTAINED to
+# engage (a brief command barely moves, and robotd's deadman zeros the twist between commands).
+# So a turn streams for a startup runway plus an angle-proportional time, with a floor so even a
+# small turn actually pivots. Rates are approximate — the model sees the result and can turn again.
+_TURN_START_S = 1.2       # gait startup before meaningful rotation
+_TURN_DEG_PER_S = 20.0    # effective yaw rate once engaged (at |vyaw|=1.0)
+_TURN_MIN_S = 2.5         # minimum sustained turn, so the gait always engages
+
 
 def _capture_camera_png(url: str, *, timeout: float = 4.0) -> bytes | None:
     """GET a single image frame from the duck's camera console, or None if unavailable."""
@@ -132,9 +140,9 @@ def build_core_tools(
         try:
             for _leg in range(2):
                 if gesture_pace:  # a real body: sustain the velocity so the policy actually walks
-                    deadline = time.monotonic() + 2.0
+                    deadline = time.monotonic() + 2.5
                     while time.monotonic() < deadline:
-                        robot.drive(vx=0.3, vy=0.0, vyaw=0.0)  # 0.15 is too gentle to start a gait
+                        robot.drive(vx=0.45, vy=0.0, vyaw=0.0)  # 0.15 is too gentle to start a gait
                         time.sleep(0.1)
                 else:  # FakeRobot / tests: record one intent, no streaming
                     robot.drive(vx=0.3, vy=0.0, vyaw=0.0)
@@ -158,6 +166,62 @@ def build_core_tools(
 
     def _explore_preview(_: dict[str, Any]) -> str:
         return "roam around a little on my own to see what's here"
+
+    def _turn(arguments: dict[str, Any]) -> ToolResult:
+        # Rotate roughly in place to face a new direction, then report the new view. Bounded
+        # (|angle| <= 180) and always stops. Positive = left (CCW), negative = right. Like explore,
+        # the yaw intent must be sustained for the walk policy to pivot, so we resend at 10 Hz on a
+        # real body; that same intent-expiry also stops the duck if anything drops.
+        raw = arguments.get("degrees", 60)
+        try:
+            degrees = max(-180.0, min(180.0, float(raw)))
+        except (TypeError, ValueError):
+            return ToolResult("'degrees' must be a number between -180 and 180", ok=False)
+        vyaw = 1.0 if degrees >= 0 else -1.0
+        duration = max(_TURN_MIN_S, _TURN_START_S + abs(degrees) / _TURN_DEG_PER_S)
+        try:
+            if gesture_pace:  # a real body: sustain the yaw so the policy actually turns
+                deadline = time.monotonic() + duration
+                while time.monotonic() < deadline:
+                    robot.drive(vx=0.0, vy=0.0, vyaw=vyaw)
+                    time.sleep(0.1)
+            else:  # FakeRobot / tests: record one intent, no streaming
+                robot.drive(vx=0.0, vy=0.0, vyaw=vyaw)
+        finally:
+            robot.stop()  # never leave the duck turning
+        robot.set_head(head_pitch=-0.1)  # settle, gaze roughly level
+        if gesture_pace:
+            time.sleep(gesture_pace)
+        png = _capture_camera_png(camera_url)
+        side = "left" if degrees >= 0 else "right"
+        if png is None:
+            return ToolResult(
+                f"I turned about {abs(int(degrees))}° to the {side}, but my camera isn't "
+                "available (run the sim with DUCK_SIM_CAMERAS=a).",
+                ok=False,
+            )
+        return ToolResult(
+            f"I turned about {abs(int(degrees))}° to the {side} — here's what's in "
+            "front of me now.",
+            image_png=png,
+        )
+
+    def _turn_preview(arguments: dict[str, Any]) -> str:
+        return f"turn to look a different way ({arguments.get('degrees', 60)}°)"
+
+    turn_schema: dict[str, Any] = {
+        "type": "object",
+        "properties": {
+            "degrees": {
+                "type": "number",
+                "minimum": -180,
+                "maximum": 180,
+                "description": "Degrees to turn in place; positive = left, negative = right.",
+            }
+        },
+        "required": ["degrees"],
+        "additionalProperties": False,
+    }
 
     gesture_schema: dict[str, Any] = {
         "type": "object",
@@ -225,5 +289,15 @@ def build_core_tools(
             _NO_ARGS_SCHEMA,
             _explore,
             preview=_explore_preview,
+        ),
+        FunctionTool(
+            "turn",
+            "Turn in place to face a new direction (positive degrees = left, negative = right), "
+            "then report what the duck now sees. Use it to look toward a different wall or object "
+            "before walking to it or examining it.",
+            Risk.ACTION,
+            turn_schema,
+            _turn,
+            preview=_turn_preview,
         ),
     ]

@@ -85,13 +85,15 @@ def main(argv: list[str] | None = None) -> int:
         return _run(voice=False)
     if args == ["voice"]:
         return _run(voice=True)
+    if args == ["explore"]:
+        return _run(voice=False, explore=True)
     if args == ["playground"]:
         return _run_playground()
-    print("usage: microduck-claude {chat|voice|playground}", file=sys.stderr)
+    print("usage: microduck-claude {chat|voice|explore|playground}", file=sys.stderr)
     return 2
 
 
-def _run(*, voice: bool) -> int:
+def _run(*, voice: bool, explore: bool = False) -> int:
     config = Config.from_env()
 
     try:
@@ -122,7 +124,9 @@ def _run(*, voice: bool) -> int:
     )
     system = system_prompt_for(config.persona)
     try:
-        if voice:
+        if explore:
+            _run_explore(llm, robot, registry, system, config)
+        elif voice:
             _run_voice(llm, robot, registry, system, config)
         else:
             _run_chat(llm, robot, registry, system, config)
@@ -169,6 +173,56 @@ def _run_chat(
             summary = _summarize(fake.calls[before:])
             if summary:
                 print(f"      🦆 {summary}")
+
+
+def _run_explore(
+    llm: LLM, robot: RobotInterface, registry: ToolRegistry, system: str, config: Config
+) -> None:
+    """Autonomous gallery exploration: the duck roams and identifies what it sees on its own.
+
+    Trust is ON for this session — launching ``explore`` IS the user's authorization for this
+    bounded, sim-safe roaming (there is no user in the loop to confirm each step). The safety core
+    is unchanged: nothing the duck hears/reads/sees can enable trust or satisfy a confirmation, and
+    on a real body the confirmation gate + hardware limits (PLAN §6) must be in place before
+    autonomous locomotion is used.
+    """
+    dispatcher = Dispatcher(registry, ConsoleConfirmer(), trust=True)
+    brain = Brain(llm, registry, dispatcher, system=system, max_tool_iterations=8)
+    rounds = 15
+
+    print(
+        f"🦆  The duck is exploring the gallery on its own (backend={config.robot_backend}, "
+        f"model={config.model}, persona={config.persona}). Ctrl-C to stop.\n"
+    )
+    seed = (
+        "You are alone in a gallery and free to explore it yourself — nobody will tell you what is "
+        "here. Turn to face something on the walls, look at it through your own camera, and work "
+        "out what it is: describe what you see, then give your best guess at the artwork and the "
+        "artist. Then move on to something you have not examined yet, keeping track of what you "
+        "have already found so you build up a sense of the whole room.\n"
+        "How to move: turn in decisive steps of about 60-90 degrees — small turns barely register, "
+        "because turning is a walking gait that needs a real pivot. Use 'explore' to walk a few "
+        "steps toward a piece when you want a closer look. Take one step of that now."
+    )
+    follow = (
+        "Keep exploring on your own — turn a solid 60-90 degrees toward a wall you have not "
+        "examined yet, look at it, and tell me what you think it is. Say if you've seen it before."
+    )
+    message = seed
+    try:
+        for _ in range(rounds):
+            try:
+                turn = brain.send(message)
+            except Exception as exc:  # keep the duck safe; surface the error and stop the loop
+                print(f"(error talking to the model: {exc})", file=sys.stderr)
+                break
+            for text in turn.texts:
+                print(f"duck › {text}")
+            message = follow
+    except KeyboardInterrupt:
+        print("\n(stopped exploring)")
+    finally:
+        robot.stop()  # never leave the duck moving when exploration ends
 
 
 def _mic_stt_available() -> bool:
