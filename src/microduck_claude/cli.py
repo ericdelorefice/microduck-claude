@@ -136,13 +136,14 @@ def _run(*, voice: bool) -> int:
 def _run_chat(
     llm: LLM, robot: RobotInterface, registry: ToolRegistry, system: str, config: Config
 ) -> None:
-    dispatcher = Dispatcher(registry, ConsoleConfirmer())
+    dispatcher = Dispatcher(registry, ConsoleConfirmer(), trust=config.trust)
     brain = Brain(llm, registry, dispatcher, system=system)
     fake = robot if isinstance(robot, FakeRobot) else None
 
+    trust = " · trust on" if config.trust else ""
     print(
         f"🦆  Talk to your Microduck (backend={config.robot_backend}, "
-        f"model={config.model}, persona={config.persona}). Ctrl-D to quit.\n"
+        f"model={config.model}, persona={config.persona}{trust}). Ctrl-D to quit.\n"
     )
     while True:
         try:
@@ -240,12 +241,13 @@ def _run_voice(
     stt, stt_kind = _build_voice_stt(config)
     tts, tts_kind, voice = _build_voice_tts(config)
     barge_in = _build_barge_in(config, tts_kind, voice)
-    dispatcher = Dispatcher(registry, VoiceConfirmer(stt, tts))
+    dispatcher = Dispatcher(registry, VoiceConfirmer(stt, tts), trust=config.trust)
     brain = Brain(llm, registry, dispatcher, system=system)
     reactor = SpeechReactor(robot)
 
     how = "Speak into your mic" if stt_kind.startswith("mic") else "Speak by typing a line"
     extra = " · barge-in on" if barge_in is not None else ""
+    extra += " · trust on" if config.trust else ""
     print(
         f"🦆  Voice mode (in={stt_kind}, out={tts_kind}, model={config.model}, "
         f"persona={config.persona}{extra}). {how}; Ctrl-D to quit.\n"

@@ -57,6 +57,7 @@ class FunctionTool:
     input_schema: dict[str, Any]
     func: ToolFn
     preview: PreviewFn | None = None
+    confirm_always: bool = False  # a consequential action: confirm even under trust mode
 
     def run(self, arguments: dict[str, Any]) -> ToolResult:
         return self.func(arguments)

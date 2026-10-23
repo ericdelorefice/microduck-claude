@@ -38,6 +38,7 @@ class Config:
     voice_input: str = "stdin"  # "stdin" (typed) | "mic" (microphone STT; needs the [voice] extra)
     stt_model: str = "base.en"
     barge_in: bool = False
+    trust: bool = False  # standing OK for actions (MICRODUCK_TRUST); content never enables it
 
     @classmethod
     def from_env(cls) -> Config:
@@ -69,6 +70,7 @@ class Config:
             voice_input=os.environ.get("MICRODUCK_VOICE_INPUT", "stdin").lower(),
             stt_model=os.environ.get("MICRODUCK_STT_MODEL", "base.en"),
             barge_in=os.environ.get("MICRODUCK_BARGE_IN", "").lower() in ("1", "true", "yes", "on"),
+            trust=os.environ.get("MICRODUCK_TRUST", "").lower() in ("1", "true", "yes", "on"),
         )
 
 

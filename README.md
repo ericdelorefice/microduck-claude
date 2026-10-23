@@ -160,16 +160,19 @@ robot over an `ssh -L` forwarded socket. Contract details and the hardware roadm
 | `MICRODUCK_VOICE_OUTPUT` | `host` | `host` (Mac speaker), `duck` (through the duck via SSH), or `elevenlabs` (cloud neural voice). |
 
 Less-common knobs — `MICRODUCK_PERSONA` detail, `MICRODUCK_MEMORY_PATH`, `MICRODUCK_SAY_VOICE`, `MICRODUCK_SAY_RATE`, the `MICRODUCK_ELEVENLABS_*` settings,
-`MICRODUCK_BARGE_IN`, `MICRODUCK_STT_MODEL`, the `MICRODUCK_DUCK_SSH_*` / audio-device settings,
+`MICRODUCK_BARGE_IN`, `MICRODUCK_TRUST`, `MICRODUCK_STT_MODEL`, the `MICRODUCK_DUCK_SSH_*` / audio-device settings,
 `MICRODUCK_API_VERSION`, `MICRODUCK_CLAUDE_MAX_TOKENS` — are listed in
 [`config.py`](src/microduck_claude/config.py).
 
 ## Safety
 
 Safety is built in, not bolted on (see [`docs/PLAN.md`](docs/PLAN.md) §6 and [`CLAUDE.md`](CLAUDE.md)):
-allow-listed tools, **read-only by default**, an explicit **confirmation gate** before any action, and
+allow-listed tools, **read-only by default**, a **confirmation gate** before any action — or a standing
+**trust mode** (`MICRODUCK_TRUST`) you switch on to skip the per-action prompt for safe actions — and
 everything the robot hears, reads, or sees treated as **untrusted input** (prompt injection). A "yes"
-produced by the model, or found inside tool output, never counts as your confirmation.
+produced by the model or found in tool output never counts as your confirmation, and nothing the duck
+hears, reads, or sees can enable trust mode. A consequential action (e.g. free locomotion) is confirmed
+even under trust.
 
 ## Development
 

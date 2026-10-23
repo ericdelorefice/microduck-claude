@@ -43,6 +43,35 @@ def test_unknown_tool_refused() -> None:
     assert result.is_error
 
 
+def test_trust_mode_runs_actions_without_asking() -> None:
+    robot = FakeRobot()
+    confirmer = RecordingConfirmer(answer=False)  # would decline if it were ever asked
+    dispatcher = Dispatcher(build_registry(robot), confirmer, trust=True)
+    result = dispatcher.dispatch("perform_gesture", {"gesture": "nod"})
+    assert result.outcome is Outcome.EXECUTED
+    assert confirmer.prompts == []  # trust mode never consulted the confirmer
+    assert dispatcher.audit[-1].auto_approved is True
+
+
+def test_trust_mode_still_confirms_a_consequential_action() -> None:
+    registry = ToolRegistry()
+    registry.register(
+        FunctionTool(
+            "risky",
+            "desc",
+            Risk.ACTION,
+            _EMPTY_SCHEMA,
+            lambda _a: ToolResult("did the risky thing"),
+            confirm_always=True,
+        )
+    )
+    confirmer = RecordingConfirmer(answer=False)
+    dispatcher = Dispatcher(registry, confirmer, trust=True)
+    result = dispatcher.dispatch("risky", {})
+    assert result.outcome is Outcome.DECLINED_BY_USER  # confirm_always overrides trust
+    assert confirmer.prompts  # it still asked, even under trust
+
+
 def test_tool_error_is_captured_not_raised() -> None:
     def boom(_a: dict[str, object]) -> ToolResult:
         raise RuntimeError("nope")

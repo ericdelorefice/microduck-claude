@@ -4,9 +4,12 @@ Every tool call Claude makes goes through :meth:`Dispatcher.dispatch`. Two
 guarantees hold regardless of what the model says or what any tool returns:
 
 * **Allow-list** — only a tool registered in the :class:`ToolRegistry` can run.
-* **Confirmation** — an ACTION runs only if the :class:`Confirmer` (the user
-  channel) says yes. The dispatcher never inspects model text or tool output to
-  decide this, so a "yes" injected into either cannot authorise an action.
+* **Confirmation** — an ACTION runs only if the user authorises it on the user
+  channel: a per-action "yes" from the :class:`Confirmer`, or a standing ``trust``
+  mode the user turned on. The dispatcher never inspects model text or tool output
+  (or anything the duck hears / reads / sees) to decide this, so a "yes" injected
+  into any of them cannot authorise an action or enable trust mode. A tool marked
+  ``confirm_always`` (a consequential action) is confirmed even under trust.
 """
 
 from __future__ import annotations
@@ -41,6 +44,7 @@ class AuditEvent:
     name: str
     risk: str | None
     outcome: Outcome
+    auto_approved: bool = False  # an action that ran under trust mode, without a prompt
 
 
 @dataclass
@@ -77,9 +81,12 @@ class DispatchResult:
 class Dispatcher:
     """Runs tool calls behind the safety gate."""
 
-    def __init__(self, registry: ToolRegistry, confirmer: Confirmer) -> None:
+    def __init__(
+        self, registry: ToolRegistry, confirmer: Confirmer, *, trust: bool = False
+    ) -> None:
         self._registry = registry
         self._confirmer = confirmer
+        self._trust = trust
         self.audit: list[AuditEvent] = []
 
     def dispatch(self, name: str, arguments: dict[str, Any]) -> DispatchResult:
@@ -89,10 +96,19 @@ class Dispatcher:
         if tool is None:
             return self._record(name, None, Outcome.REFUSED_UNKNOWN, None)
 
-        # 2. Confirmation gate: actions require a 'yes' from the confirmer (the user
-        #    channel) ONLY — never from model text or tool output.
-        if tool.risk is Risk.ACTION and not self._confirmer.confirm(self._prompt(tool, arguments)):
-            return self._record(name, tool.risk, Outcome.DECLINED_BY_USER, None)
+        # 2. Confirmation gate: an ACTION needs the user's OK on the user channel —
+        #    either a per-action 'yes' from the confirmer, or a standing trust mode the
+        #    user turned on. Model text, tool output, or anything heard/read/seen can
+        #    never authorise one. A consequential (confirm_always) action is confirmed
+        #    even under trust.
+        auto_approved = False
+        if tool.risk is Risk.ACTION:
+            always = getattr(tool, "confirm_always", False)
+            if self._trust and not always:
+                auto_approved = True
+                log.info("auto-approved action %r (trust mode on)", name)
+            elif not self._confirmer.confirm(self._prompt(tool, arguments)):
+                return self._record(name, tool.risk, Outcome.DECLINED_BY_USER, None)
 
         # 3. Run the tool; a failure becomes an error result, not a crash.
         try:
@@ -104,7 +120,7 @@ class Dispatcher:
             )
 
         outcome = Outcome.EXECUTED if result.ok else Outcome.ERROR
-        return self._record(name, tool.risk, outcome, result)
+        return self._record(name, tool.risk, outcome, result, auto_approved=auto_approved)
 
     def _prompt(self, tool: Tool, arguments: dict[str, Any]) -> str:
         preview = getattr(tool, "preview", None)
@@ -118,8 +134,15 @@ class Dispatcher:
         risk: Risk | None,
         outcome: Outcome,
         result: ToolResult | None,
+        *,
+        auto_approved: bool = False,
     ) -> DispatchResult:
         self.audit.append(
-            AuditEvent(name=name, risk=risk.value if risk is not None else None, outcome=outcome)
+            AuditEvent(
+                name=name,
+                risk=risk.value if risk is not None else None,
+                outcome=outcome,
+                auto_approved=auto_approved,
+            )
         )
         return DispatchResult(name=name, outcome=outcome, result=result)
