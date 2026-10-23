@@ -122,6 +122,41 @@ def build_core_tools(
     def _gesture_preview(arguments: dict[str, Any]) -> str:
         return f"do a little {arguments.get('gesture')}"
 
+    def _explore(_: dict[str, Any]) -> ToolResult:
+        # A bounded, safe autonomous roam: a few slow forward hops, looking between each.
+        # The caps live here (not with the model), and the duck always stops at the end.
+        # Sim-safe as written; a physical robot needs hardware limits (speed cap, tilt/bump
+        # stop, a kill) before it roams a real room — see docs/PLAN.md.
+        try:
+            for _hop in range(3):
+                if gesture_pace:  # a real body: stream the velocity briefly to actually move
+                    deadline = time.monotonic() + 0.6
+                    while time.monotonic() < deadline:
+                        robot.drive(vx=0.15, vy=0.0, vyaw=0.0)
+                        time.sleep(0.05)
+                else:  # FakeRobot / tests: record one intent, no streaming
+                    robot.drive(vx=0.15, vy=0.0, vyaw=0.0)
+                robot.stop()
+                robot.set_head(head_pitch=-0.2)  # look ahead after the hop
+                if gesture_pace:
+                    time.sleep(gesture_pace)
+        finally:
+            robot.stop()  # never leave the duck driving
+        png = _capture_camera_png(camera_url)
+        if png is None:
+            return ToolResult(
+                "I had a short roam around, but my camera isn't available to show what I "
+                "found (run the sim with DUCK_SIM_CAMERAS=a).",
+                ok=False,
+            )
+        return ToolResult(
+            "I roamed forward a little on my own, pausing to look — here's where I ended up.",
+            image_png=png,
+        )
+
+    def _explore_preview(_: dict[str, Any]) -> str:
+        return "roam around a little on my own to see what's here"
+
     gesture_schema: dict[str, Any] = {
         "type": "object",
         "properties": {
@@ -179,5 +214,14 @@ def build_core_tools(
             gesture_schema,
             _perform_gesture,
             preview=_gesture_preview,
+        ),
+        FunctionTool(
+            "explore",
+            "Roam a little on your own — a short, bounded forward wander, pausing to look — and "
+            "report what you find. Use when asked to explore or go see what's around.",
+            Risk.ACTION,
+            _NO_ARGS_SCHEMA,
+            _explore,
+            preview=_explore_preview,
         ),
     ]

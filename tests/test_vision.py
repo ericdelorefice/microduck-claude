@@ -7,6 +7,7 @@ import pytest
 from microduck_claude.assembly import build_registry
 from microduck_claude.brain import AnthropicLLM, ToolResult
 from microduck_claude.robot import FakeRobot
+from microduck_claude.tools import Risk
 from microduck_claude.tools import core as tools_core
 from tests.fakes import FakeAnthropic, text_response
 
@@ -64,3 +65,23 @@ def test_look_around_is_honest_without_a_camera(monkeypatch: pytest.MonkeyPatch)
     result = tool.run({})
     assert not result.ok
     assert result.image_png is None
+
+
+def test_explore_roams_and_always_stops(monkeypatch: pytest.MonkeyPatch) -> None:
+    monkeypatch.setattr(tools_core, "_capture_camera_png", lambda url, **kw: b"\x89PNG-roam")
+    robot = FakeRobot()
+    tool = build_registry(robot, camera_url="http://cam/frame").get("explore")
+    assert tool is not None
+    result = tool.run({})
+    assert result.ok
+    assert result.image_png == b"\x89PNG-roam"
+    methods = [c.method for c in robot.calls]
+    assert "drive" in methods and "stop" in methods
+    assert methods[-1] == "stop"  # it never leaves the duck driving
+
+
+def test_explore_is_a_gated_action() -> None:
+    # explore moves the body, so it is an ACTION (gated), unlike the read-only look_around.
+    tool = build_registry(FakeRobot(), camera_url="http://cam/frame").get("explore")
+    assert tool is not None
+    assert tool.risk is Risk.ACTION

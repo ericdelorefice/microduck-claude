@@ -23,6 +23,7 @@ def test_core_tools_registered() -> None:
         "see",
         "look_around",
         "perform_gesture",
+        "explore",
     }
 
 

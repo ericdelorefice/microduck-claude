@@ -23,6 +23,8 @@ research, and licenses are in [`docs/PLAN.md`](docs/PLAN.md); engineering guardr
 - **Sees** — a `see` tool grabs the duck's camera frame and hands it to Claude as an image, so it can
   describe or react to what's in front of it. [`scripts/duck-cam.html`](scripts/duck-cam.html) shows the
   live feed as a floating "body-cam."
+- **Explores** — a bounded `explore` roam: it creeps forward on its own, pausing to look, then reports
+  what it found (an action, behind the confirm / trust gate; the movement is slow and short).
 - **Remembers** — a local long-term memory (`remember` / `recall` / `forget`), writes gated.
 - **Stays safe** — allow-listed tools, read-only by default, a confirmation gate before any action, and
   everything it hears / reads / sees treated as untrusted.
