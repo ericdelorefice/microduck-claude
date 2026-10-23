@@ -92,6 +92,11 @@ from the live mic only** — a "yes" in the model's text or a tool result never 
 For a dry British-narrator manner, run with `MICRODUCK_PERSONA=narrator` — it pairs well with a
 measured `MICRODUCK_SAY_RATE` (e.g. `165`) and an en-GB voice like Daniel or Oliver.
 
+For a studio-grade narrator voice, set `MICRODUCK_VOICE_OUTPUT=elevenlabs` with `ELEVENLABS_API_KEY`
+(from your env) and `MICRODUCK_ELEVENLABS_VOICE=<voice id>` — a rich neural voice via
+[ElevenLabs](https://elevenlabs.io) (optional, cloud-based; the core stays on offline `say`). Grab a
+British-narrator voice id from your ElevenLabs Voice Library.
+
 ### Vision & the duck-cam
 
 With a camera-enabled `duck-sim` (or robot), ask *"what do you see?"* — the `see` tool captures a frame
@@ -152,9 +157,9 @@ robot over an `ssh -L` forwarded socket. Contract details and the hardware roadm
 | `MICRODUCK_ROBOT_SOCKET` | `~/.cache/duck-sim/duck-a.sock` | Unix socket for the `rpc` backend. |
 | `MICRODUCK_CAMERA_URL` | `http://127.0.0.1:8080/frame` | Camera snapshot endpoint for the `see` tool. |
 | `MICRODUCK_VOICE_INPUT` | `stdin` | `stdin` (typed) or `mic` (needs the `[voice]` extra). |
-| `MICRODUCK_VOICE_OUTPUT` | `host` | `host` (Mac speaker) or `duck` (through the duck via SSH). |
+| `MICRODUCK_VOICE_OUTPUT` | `host` | `host` (Mac speaker), `duck` (through the duck via SSH), or `elevenlabs` (cloud neural voice). |
 
-Less-common knobs — `MICRODUCK_PERSONA` detail, `MICRODUCK_MEMORY_PATH`, `MICRODUCK_SAY_VOICE`, `MICRODUCK_SAY_RATE`,
+Less-common knobs — `MICRODUCK_PERSONA` detail, `MICRODUCK_MEMORY_PATH`, `MICRODUCK_SAY_VOICE`, `MICRODUCK_SAY_RATE`, the `MICRODUCK_ELEVENLABS_*` settings,
 `MICRODUCK_BARGE_IN`, `MICRODUCK_STT_MODEL`, the `MICRODUCK_DUCK_SSH_*` / audio-device settings,
 `MICRODUCK_API_VERSION`, `MICRODUCK_CLAUDE_MAX_TOKENS` — are listed in
 [`config.py`](src/microduck_claude/config.py).

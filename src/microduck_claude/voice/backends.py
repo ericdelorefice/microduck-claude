@@ -12,11 +12,14 @@ core so the package stays dependency-light and CI needs no audio hardware.
 
 from __future__ import annotations
 
+import json
 import os
 import shutil
 import subprocess
 import sys
 import tempfile
+import urllib.error
+import urllib.request
 from collections.abc import Callable, Sequence
 from typing import TextIO
 
@@ -121,3 +124,78 @@ def pick_say_voice(*, min_bytes: int = 2048) -> str | None:
             if path and os.path.exists(path):
                 os.unlink(path)
     return None
+
+
+_ELEVEN_ENDPOINT = "https://api.elevenlabs.io/v1/text-to-speech/{voice}"
+_ELEVEN_MODEL = "eleven_multilingual_v2"
+
+Fetcher = Callable[[str, bytes, dict[str, str]], bytes]
+Player = Callable[[bytes], None]
+
+
+def _default_fetch(url: str, data: bytes, headers: dict[str, str]) -> bytes:
+    request = urllib.request.Request(url, data=data, headers=headers, method="POST")
+    with urllib.request.urlopen(request, timeout=30) as response:
+        audio: bytes = response.read()
+    return audio
+
+
+def _afplay(audio: bytes) -> None:
+    with tempfile.NamedTemporaryFile(suffix=".mp3", delete=False) as handle:
+        handle.write(audio)
+        path = handle.name
+    try:
+        subprocess.run(["afplay", path], check=False)
+    finally:
+        if os.path.exists(path):
+            os.unlink(path)
+
+
+class ElevenLabsTTS:
+    """Speaks via ElevenLabs' cloud TTS — a rich, studio-grade narrator voice.
+
+    Optional and cloud-based: needs ``ELEVENLABS_API_KEY`` in the environment (never
+    committed or logged) and a voice id. Audio is synthesized over HTTPS and played with
+    ``afplay``. ``fetch`` / ``player`` are injectable for tests.
+    """
+
+    def __init__(
+        self,
+        api_key: str,
+        voice: str,
+        *,
+        model: str = _ELEVEN_MODEL,
+        fetch: Fetcher | None = None,
+        player: Player | None = None,
+    ) -> None:
+        self._api_key = api_key
+        self._voice = voice
+        self._model = model
+        self._fetch = fetch if fetch is not None else _default_fetch
+        self._player = player if player is not None else _afplay
+
+    @staticmethod
+    def player_available() -> bool:
+        return shutil.which("afplay") is not None
+
+    def speak(self, text: str) -> None:
+        url = _ELEVEN_ENDPOINT.format(voice=self._voice)
+        body = json.dumps(
+            {
+                "text": text,
+                "model_id": self._model,
+                "voice_settings": {"stability": 0.4, "similarity_boost": 0.85, "style": 0.35},
+            }
+        ).encode("utf-8")
+        headers = {
+            "xi-api-key": self._api_key,
+            "Content-Type": "application/json",
+            "Accept": "audio/mpeg",
+        }
+        try:
+            audio = self._fetch(url, body, headers)
+        except (urllib.error.URLError, OSError) as exc:
+            print(f"(ElevenLabs TTS failed: {exc})", file=sys.stderr)
+            return
+        if audio:
+            self._player(audio)

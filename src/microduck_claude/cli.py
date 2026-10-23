@@ -17,6 +17,7 @@ from .safety import Dispatcher
 from .tools import ToolRegistry
 from .voice import (
     BargeInController,
+    ElevenLabsTTS,
     FasterWhisperSTT,
     InterruptibleSayTTS,
     MacSayTTS,
@@ -198,6 +199,16 @@ def _build_voice_tts(config: Config) -> tuple[TextToSpeech, str, str]:
     Returns the TTS, a short kind label, and the resolved macOS ``say`` voice (empty if
     none) so barge-in can speak in the same voice.
     """
+    if config.voice_output == "elevenlabs":
+        api_key = os.environ.get("ELEVENLABS_API_KEY", "")
+        if api_key and config.elevenlabs_voice and ElevenLabsTTS.player_available():
+            eleven = ElevenLabsTTS(api_key, config.elevenlabs_voice, model=config.elevenlabs_model)
+            return eleven, f"elevenlabs:{config.elevenlabs_voice}", ""
+        print(
+            "(elevenlabs voice needs ELEVENLABS_API_KEY + MICRODUCK_ELEVENLABS_VOICE + afplay; "
+            "using the macOS voice instead)",
+            file=sys.stderr,
+        )
     if config.voice_output == "duck" and config.duck_ssh_host:
         target = SshTarget(config.duck_ssh_host, config.duck_audio_device, config.duck_ssh_user)
         tts = SshDuckTTS(MacSayWavRenderer(), SshDuckAudio(target))
