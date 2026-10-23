@@ -134,10 +134,10 @@ def build_core_tools(
                 if gesture_pace:  # a real body: sustain the velocity so the policy actually walks
                     deadline = time.monotonic() + 2.0
                     while time.monotonic() < deadline:
-                        robot.drive(vx=0.15, vy=0.0, vyaw=0.0)
+                        robot.drive(vx=0.3, vy=0.0, vyaw=0.0)  # 0.15 is too gentle to start a gait
                         time.sleep(0.1)
                 else:  # FakeRobot / tests: record one intent, no streaming
-                    robot.drive(vx=0.15, vy=0.0, vyaw=0.0)
+                    robot.drive(vx=0.3, vy=0.0, vyaw=0.0)
                 robot.stop()
                 robot.set_head(head_pitch=-0.2)  # look ahead after the leg
                 if gesture_pace:
