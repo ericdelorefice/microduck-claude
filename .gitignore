@@ -28,6 +28,13 @@ venv/
 .coverage
 htmlcov/
 
+# Gallery demo: generated assets (rebuild with scripts/gallery/build_gallery.py) + scratch renders.
+# The source paintings (scenes/paintings/) ARE committed; everything else here is regenerated.
+/scenes/*.png
+/scenes/*.xml
+/scenes/textures/
+/scenes/meshes/
+
 # OS / editor
 .DS_Store
 .idea/

@@ -1,6 +1,8 @@
 from __future__ import annotations
 
-from microduck_claude.voice import MacSayTTS, PrintTTS, StdinSTT
+import json
+
+from microduck_claude.voice import ElevenLabsTTS, MacSayTTS, PrintTTS, StdinSTT
 
 
 def test_stdin_stt_reads_lines_then_stops(monkeypatch) -> None:
@@ -37,3 +39,45 @@ def test_mac_say_with_voice_flag() -> None:
 
 def test_mac_say_available_is_bool() -> None:
     assert isinstance(MacSayTTS.available(), bool)
+
+
+def test_elevenlabs_posts_text_and_plays() -> None:
+    seen: dict[str, object] = {}
+    played: list[bytes] = []
+
+    def fake_fetch(url: str, data: bytes, headers: dict[str, str]) -> bytes:
+        seen["url"] = url
+        seen["headers"] = headers
+        seen["body"] = json.loads(data)
+        return b"ID3-mp3-bytes"
+
+    ElevenLabsTTS("secret-key", "VOICE123", fetch=fake_fetch, player=played.append).speak(
+        "Hello, narrator."
+    )
+
+    assert "VOICE123" in str(seen["url"])
+    assert seen["headers"]["xi-api-key"] == "secret-key"  # type: ignore[index]
+    assert seen["body"]["text"] == "Hello, narrator."  # type: ignore[index]
+    assert played == [b"ID3-mp3-bytes"]
+
+
+def test_elevenlabs_never_prints_the_key_on_failure(capsys) -> None:
+    def boom(url: str, data: bytes, headers: dict[str, str]) -> bytes:
+        raise OSError("network down")
+
+    ElevenLabsTTS("super-secret", "V", fetch=boom, player=lambda _a: None).speak("hi")
+    assert "super-secret" not in capsys.readouterr().err
+
+
+def test_elevenlabs_survives_a_truncated_response(capsys) -> None:
+    import http.client
+
+    def truncated(url: str, data: bytes, headers: dict[str, str]) -> bytes:
+        # IncompleteRead (a dropped body) is an HTTPException, not an OSError.
+        raise http.client.IncompleteRead(b"partial")
+
+    # Must not raise — the voice loop keeps going and reports the failure without the key.
+    ElevenLabsTTS("super-secret", "V", fetch=truncated, player=lambda _a: None).speak("hi")
+    err = capsys.readouterr().err
+    assert "ElevenLabs TTS failed" in err
+    assert "super-secret" not in err

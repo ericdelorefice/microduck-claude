@@ -16,12 +16,14 @@ def build_robot(
     *,
     socket_path: str = DEFAULT_SIM_SOCKET,
     api_version: int = API_VERSION,
+    camera_url: str = "",
 ) -> RobotInterface:
     """Return a :class:`RobotInterface`.
 
     ``"fake"`` is the in-process :class:`FakeRobot`. ``"rpc"`` connects to a running
     ``duck-sim`` (or an ``ssh -L`` forwarded robot socket) and performs the handshake;
     it may raise ``OSError`` (no socket) or ``JsonRpcError`` (handshake failed).
+    ``camera_url`` is the live body's camera snapshot endpoint (the fake has no camera).
     """
     backend = backend.lower()
     if backend == "fake":
@@ -29,7 +31,7 @@ def build_robot(
     if backend == "rpc":
         transport = UnixSocketTransport(os.path.expanduser(socket_path))
         transport.connect()
-        robot = RpcRobot(transport, api_version=api_version)
+        robot = RpcRobot(transport, api_version=api_version, camera_url=camera_url)
         robot.handshake()
         return robot
     raise ValueError(f"unknown robot backend {backend!r}; use 'fake' or 'rpc'")

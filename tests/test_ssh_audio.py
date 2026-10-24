@@ -50,6 +50,16 @@ def test_mac_say_wav_renderer_reads_rendered_file() -> None:
     assert MacSayWavRenderer(runner=runner).render("hello") == b"RIFFfake"
 
 
+def test_mac_say_wav_renderer_includes_voice_and_rate_flags() -> None:
+    commands: list[list[str]] = []
+    MacSayWavRenderer(
+        voice="Daniel", rate=180, runner=lambda cmd: commands.append(list(cmd))
+    ).render("hi")
+    cmd = commands[0]
+    assert "-v" in cmd and "Daniel" in cmd
+    assert cmd[cmd.index("-r") + 1] == "180"  # the SSH path now honours say_rate
+
+
 def test_ssh_duck_tts_renders_then_plays() -> None:
     stdins: list[bytes | None] = []
 

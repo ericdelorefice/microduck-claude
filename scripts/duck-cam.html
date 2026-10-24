@@ -1,0 +1,169 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<meta name="color-scheme" content="dark">
+<title>Duck-Cam</title>
+<style>
+  :root {
+    --bg: #0b0e13;
+    --panel: #11161f;
+    --edge: #1e2733;
+    --text: #e6edf3;
+    --muted: #7d8796;
+    --rec: #ff3b30;
+    --duck: #ffd43b;
+  }
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+  html, body { height: 100%; }
+  body {
+    background: var(--bg);
+    color: var(--text);
+    font: 13px/1.4 ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    padding: 10px;
+    -webkit-user-select: none;
+    user-select: none;
+  }
+  .cam {
+    width: 100%;
+    max-width: 240px;
+    background: var(--panel);
+    border: 1px solid var(--edge);
+    border-radius: 14px;
+    overflow: hidden;
+    box-shadow: 0 10px 30px rgba(0, 0, 0, .45);
+  }
+  .bar {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    padding: 8px 10px;
+    background: linear-gradient(180deg, #141b26, #0f141d);
+    border-bottom: 1px solid var(--edge);
+  }
+  .dot {
+    width: 9px; height: 9px; border-radius: 50%;
+    background: var(--rec);
+    box-shadow: 0 0 8px var(--rec);
+    animation: blink 1.1s steps(1) infinite;
+  }
+  @keyframes blink { 50% { opacity: .25; } }
+  .label { font-weight: 700; letter-spacing: .14em; }
+  .label .duck { color: var(--duck); }
+  .meta { color: var(--muted); font-size: 11px; }
+  .screen {
+    position: relative;
+    aspect-ratio: 9 / 16;
+    background: #000;
+    display: grid;
+    place-items: center;
+    overflow: hidden;
+  }
+  .screen img { width: 100%; height: 100%; object-fit: contain; display: block; }
+  .screen .scan {
+    position: absolute; inset: 0;
+    pointer-events: none;
+    background: repeating-linear-gradient(0deg, rgba(255, 255, 255, .03) 0 1px, transparent 1px 3px);
+    mix-blend-mode: overlay;
+  }
+  .lost {
+    position: absolute; inset: 0;
+    display: none; place-items: center;
+    color: var(--muted); background: #000;
+    letter-spacing: .12em;
+  }
+  .cam.offline .lost { display: grid; }
+  .cam.offline .dot { background: var(--muted); box-shadow: none; animation: none; }
+  .foot {
+    display: flex; align-items: center; gap: 10px;
+    padding: 7px 10px;
+    color: var(--muted); font-size: 11px;
+    border-top: 1px solid var(--edge);
+  }
+  .foot b { color: var(--text); font-weight: 600; }
+  .foot .src { flex: 1; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  .foot button {
+    background: var(--edge); color: var(--text); border: 0;
+    border-radius: 7px; padding: 4px 9px; font: inherit; cursor: pointer;
+  }
+  .foot button:hover { background: #28323f; }
+</style>
+</head>
+<body>
+  <div class="cam" id="cam">
+    <div class="bar">
+      <span class="dot"></span>
+      <span class="label"><span class="duck">DUCK</span>-CAM</span>
+      <span style="flex:1"></span>
+      <span class="meta" id="clock">--:--:--</span>
+    </div>
+    <div class="screen">
+      <img id="frame" alt="what the duck sees">
+      <div class="scan"></div>
+      <div class="lost">&#9679; SIGNAL LOST</div>
+    </div>
+    <div class="foot">
+      <span>live &middot; <b id="fps">0</b> fps</span>
+      <span class="src" id="src"></span>
+      <button id="pop" hidden>&#8689; float</button>
+    </div>
+  </div>
+<script>
+  const params = new URLSearchParams(location.search);
+  const FRAME_URL = params.get("url") || "http://127.0.0.1:8080/frame";
+  const cam = document.getElementById("cam");
+  const img = document.getElementById("frame");
+  const clock = document.getElementById("clock");
+  const fpsEl = document.getElementById("fps");
+  const srcEl = document.getElementById("src");
+  const popBtn = document.getElementById("pop");
+  srcEl.textContent = FRAME_URL.replace(/^https?:\/\//, "");
+
+  const MIN_INTERVAL = 80; // cap around 12 fps so we never outrun the camera
+  let stamps = [];
+  let lastStart = 0;
+
+  function tick() {
+    lastStart = performance.now();
+    img.src = FRAME_URL + (FRAME_URL.includes("?") ? "&" : "?") + "t=" + Date.now();
+  }
+  img.onload = () => {
+    cam.classList.remove("offline");
+    const now = performance.now();
+    stamps.push(now);
+    stamps = stamps.filter(t => now - t < 1000);
+    fpsEl.textContent = stamps.length;
+    setTimeout(tick, Math.max(0, MIN_INTERVAL - (now - lastStart)));
+  };
+  img.onerror = () => {
+    cam.classList.add("offline");
+    fpsEl.textContent = 0;
+    stamps = [];
+    setTimeout(tick, 600);
+  };
+  setInterval(() => {
+    clock.textContent = new Date().toLocaleTimeString([], { hour12: false });
+  }, 1000);
+
+  // "float" pops the cam into an always-on-top window you can park in a corner.
+  if ("documentPictureInPicture" in window) {
+    popBtn.hidden = false;
+    popBtn.onclick = async () => {
+      try {
+        const pip = await documentPictureInPicture.requestWindow({ width: 260, height: 520 });
+        document.querySelectorAll("style").forEach(s => pip.document.head.appendChild(s.cloneNode(true)));
+        pip.document.body.style.margin = "0";
+        pip.document.body.appendChild(cam);
+        pip.addEventListener("pagehide", () => document.body.appendChild(cam));
+      } catch (e) { /* user cancelled or unsupported */ }
+    };
+  }
+
+  tick();
+</script>
+</body>
+</html>

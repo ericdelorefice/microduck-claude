@@ -26,13 +26,23 @@ class Config:
     robot_backend: str = "fake"  # "fake" (in-process) | "rpc" (real duck-sim / robot)
     robot_socket: str = DEFAULT_SIM_SOCKET
     api_version: int = API_VERSION
-    voice_output: str = "host"  # "host" (Mac speaker) | "duck" (speak through the duck via SSH)
+    voice_output: str = "host"  # "host" (Mac say) | "duck" (SSH) | "elevenlabs" (cloud neural)
+    say_voice: str = ""  # macOS 'say' voice (e.g. "Daniel"); empty = auto-pick a working one
+    say_rate: int = 0  # macOS 'say' words-per-minute (0 = system default; ~165 reads narrator-ish)
+    elevenlabs_voice: str = ""  # ElevenLabs voice id, for voice_output=elevenlabs
+    elevenlabs_model: str = "eleven_multilingual_v2"  # ElevenLabs model id
+    camera_url: str = "http://127.0.0.1:8080/frame"  # duck camera snapshot endpoint
     duck_ssh_host: str = ""
     duck_audio_device: str = "plughw:aic3104"
     duck_ssh_user: str = "microduck"
     voice_input: str = "stdin"  # "stdin" (typed) | "mic" (microphone STT; needs the [voice] extra)
     stt_model: str = "base.en"
     barge_in: bool = False
+    trust: bool = False  # standing OK for actions (MICRODUCK_TRUST); content never enables it
+    # Opt-in to run autonomous `explore` on the rpc backend. The rpc backend serves BOTH the
+    # duck-sim and a real body, so autonomous locomotion there is refused unless the operator
+    # sets this to confirm it points at the simulator (a real body needs PLAN §6 limits first).
+    explore_allow_rpc: bool = False
 
     @classmethod
     def from_env(cls) -> Config:
@@ -53,12 +63,20 @@ class Config:
             robot_socket=os.environ.get("MICRODUCK_ROBOT_SOCKET", DEFAULT_SIM_SOCKET),
             api_version=_int_env("MICRODUCK_API_VERSION", API_VERSION),
             voice_output=os.environ.get("MICRODUCK_VOICE_OUTPUT", "host").lower(),
+            say_voice=os.environ.get("MICRODUCK_SAY_VOICE", ""),
+            say_rate=_int_env("MICRODUCK_SAY_RATE", 0),
+            elevenlabs_voice=os.environ.get("MICRODUCK_ELEVENLABS_VOICE", ""),
+            elevenlabs_model=os.environ.get("MICRODUCK_ELEVENLABS_MODEL", "eleven_multilingual_v2"),
+            camera_url=os.environ.get("MICRODUCK_CAMERA_URL", "http://127.0.0.1:8080/frame"),
             duck_ssh_host=os.environ.get("MICRODUCK_DUCK_SSH_HOST", ""),
             duck_audio_device=os.environ.get("MICRODUCK_DUCK_AUDIO_DEVICE", "plughw:aic3104"),
             duck_ssh_user=os.environ.get("MICRODUCK_DUCK_SSH_USER", "microduck"),
             voice_input=os.environ.get("MICRODUCK_VOICE_INPUT", "stdin").lower(),
             stt_model=os.environ.get("MICRODUCK_STT_MODEL", "base.en"),
             barge_in=os.environ.get("MICRODUCK_BARGE_IN", "").lower() in ("1", "true", "yes", "on"),
+            trust=os.environ.get("MICRODUCK_TRUST", "").lower() in ("1", "true", "yes", "on"),
+            explore_allow_rpc=os.environ.get("MICRODUCK_EXPLORE_ALLOW_RPC", "").lower()
+            in ("1", "true", "yes", "on"),
         )
 
 

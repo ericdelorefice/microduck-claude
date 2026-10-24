@@ -1,13 +1,58 @@
 from __future__ import annotations
 
+import http.client
 import time
 
 import pytest
 
 from microduck_claude.expressions import perform_gesture
-from microduck_claude.robot import FakeRobot, RobotInterface, RpcRobot, UnixSocketTransport
+from microduck_claude.robot import FakeRobot, RobotInterface, RpcRobot, UnixSocketTransport, rpc
+from microduck_claude.robot import protocol as p
 from microduck_claude.robot.transport import JsonRpcError
 from tests.duck_server import FakeDuckServer
+
+_PNG = b"\x89PNG\r\n\x1a\n"
+
+
+class _RecordingTransport:
+    """A minimal transport stand-in that records notify/request calls (no socket)."""
+
+    def __init__(self) -> None:
+        self.notifies: list[tuple[str, object]] = []
+        self.requests: list[tuple[str, object]] = []
+
+    def notify(self, method: str, params: object = None) -> None:
+        self.notifies.append((method, params))
+
+    def request(self, method: str, params: object = None) -> object:
+        self.requests.append((method, params))
+        return {}
+
+    def close(self) -> None:
+        pass
+
+    def latest_state(self) -> dict[str, object]:
+        return {}
+
+
+class _FakeHTTPResponse:
+    """A minimal urlopen() context manager returning canned camera bytes."""
+
+    def __init__(self, data: bytes, status: int = 200, truncate: bool = False) -> None:
+        self._data = data
+        self.status = status
+        self._truncate = truncate
+
+    def __enter__(self) -> _FakeHTTPResponse:
+        return self
+
+    def __exit__(self, *exc: object) -> None:
+        return None
+
+    def read(self, amt: int = -1) -> bytes:
+        if self._truncate:
+            raise http.client.IncompleteRead(b"partial")
+        return self._data[:amt] if amt is not None and amt >= 0 else self._data
 
 
 def _connect(server: FakeDuckServer) -> RpcRobot:
@@ -112,6 +157,49 @@ def test_error_surfaces_as_exception() -> None:
                 robot.list_behaviors()
         finally:
             robot.close()
+
+
+def test_drive_for_streams_the_twist_then_stops(monkeypatch: pytest.MonkeyPatch) -> None:
+    # The keep-alive (resend the twist so robotd's deadman doesn't zero it) lives here now.
+    ticks = iter(i * 0.1 for i in range(100000))
+    monkeypatch.setattr(rpc.time, "monotonic", lambda: next(ticks))
+    monkeypatch.setattr(rpc.time, "sleep", lambda _s: None)  # don't actually wait
+    transport = _RecordingTransport()
+    robot = RpcRobot(transport)  # type: ignore[arg-type]
+    robot.drive_for(0.0, 0.0, 1.0, duration=0.5)
+    moves = [m for m in transport.notifies if m[0] == p.ROBOT_MOVE]
+    assert len(moves) > 1  # it kept resending the twist
+    assert any(r[0] == p.ROBOT_STOP for r in transport.requests)  # and stopped at the end
+
+
+def _rpc_with_camera(monkeypatch: pytest.MonkeyPatch, response: _FakeHTTPResponse) -> RpcRobot:
+    monkeypatch.setattr(rpc.urllib.request, "urlopen", lambda url, timeout=0: response)
+    return RpcRobot(UnixSocketTransport("/nonexistent.sock"), camera_url="http://cam/frame")
+
+
+def test_capture_frame_accepts_a_small_valid_image(monkeypatch: pytest.MonkeyPatch) -> None:
+    frame = _PNG + b"pixels"
+    assert _rpc_with_camera(monkeypatch, _FakeHTTPResponse(frame)).capture_frame() == frame
+
+
+def test_capture_frame_rejects_a_non_image_payload(monkeypatch: pytest.MonkeyPatch) -> None:
+    robot = _rpc_with_camera(monkeypatch, _FakeHTTPResponse(b"<html>500 error</html>"))
+    assert robot.capture_frame() is None
+
+
+def test_capture_frame_rejects_an_oversized_frame(monkeypatch: pytest.MonkeyPatch) -> None:
+    robot = _rpc_with_camera(monkeypatch, _FakeHTTPResponse(_PNG + b"x" * (6 * 1024 * 1024)))
+    assert robot.capture_frame() is None
+
+
+def test_capture_frame_handles_a_truncated_response(monkeypatch: pytest.MonkeyPatch) -> None:
+    robot = _rpc_with_camera(monkeypatch, _FakeHTTPResponse(b"", truncate=True))
+    assert robot.capture_frame() is None
+
+
+def test_capture_frame_without_a_camera_url_is_none() -> None:
+    robot = RpcRobot(UnixSocketTransport("/nonexistent.sock"))  # no camera configured
+    assert robot.capture_frame() is None
 
 
 def test_drop_in_equivalence_with_fake_robot() -> None:

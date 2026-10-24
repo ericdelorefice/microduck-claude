@@ -99,3 +99,29 @@ def test_tool_call_roundtrip() -> None:
         tool_msg = fake.requests[1]["messages"][-1]
         assert tool_msg["role"] == "tool"
         assert tool_msg["tool_call_id"] == "c1"
+
+
+def test_tool_result_with_image_tells_the_model_it_cannot_see() -> None:
+    # This adapter drops images; the tool result must say so, or the model invents a view.
+    with _FakeOpenAI([_text("acknowledged")]) as fake:
+        llm = OpenAICompatLLM(model="m", base_url=fake.base_url)
+        llm.start("S", [])
+        llm.send_tool_results(
+            [ToolResult("c1", "Here is what the camera sees.", image_png=b"PNGBYTES")]
+        )
+        tool_msg = fake.requests[0]["messages"][-1]
+        assert tool_msg["role"] == "tool"
+        assert "cannot see images" in tool_msg["content"]
+
+
+def test_dangling_tool_calls_are_closed_before_the_next_user_turn() -> None:
+    with _FakeOpenAI([_tool("c1", "do", {}), _text("ok")]) as fake:
+        llm = OpenAICompatLLM(model="m", base_url=fake.base_url)
+        llm.start("S", [])
+        llm.send_user("go")  # returns an assistant tool_call c1, left unanswered (as if capped)
+        llm.send_user("again")  # must answer c1 before sending the next user message
+        messages = fake.requests[1]["messages"]
+        assert any(
+            m.get("role") == "tool" and m.get("tool_call_id") == "c1" for m in messages
+        )  # c1 was closed
+        assert messages[-1] == {"role": "user", "content": "again"}

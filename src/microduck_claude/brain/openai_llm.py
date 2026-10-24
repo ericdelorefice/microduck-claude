@@ -43,15 +43,40 @@ class OpenAICompatLLM:
         self._messages = [{"role": "system", "content": system}] if system else []
 
     def send_user(self, text: str) -> LLMResponse:
+        self._close_dangling_tool_calls()
         self._messages.append({"role": "user", "content": text})
         return self._complete()
 
     def send_tool_results(self, results: list[ToolResult]) -> LLMResponse:
         for result in results:
+            content = result.content
+            if result.image_png is not None:
+                # This adapter cannot deliver images, so say so plainly — otherwise the vision
+                # tool's own text ("here's what the camera sees") would make the model invent
+                # a scene it never saw.
+                note = "(A camera image was captured, but this model cannot see images.)"
+                content = f"{content}\n\n{note}" if content else note
             self._messages.append(
-                {"role": "tool", "tool_call_id": result.tool_call_id, "content": result.content}
+                {"role": "tool", "tool_call_id": result.tool_call_id, "content": content}
             )
         return self._complete()
+
+    def _close_dangling_tool_calls(self) -> None:
+        """Answer any tool_calls left unanswered by a capped/aborted turn.
+
+        OpenAI requires an assistant message carrying tool_calls to be followed by one tool
+        message per call, so an unanswered turn would make the next user message invalid.
+        """
+        if not self._messages or self._messages[-1].get("role") != "assistant":
+            return
+        for call in self._messages[-1].get("tool_calls") or []:
+            self._messages.append(
+                {
+                    "role": "tool",
+                    "tool_call_id": str(call.get("id", "")),
+                    "content": "Stopped: the tool-call limit for this turn was reached.",
+                }
+            )
 
     def _complete(self) -> LLMResponse:
         payload: dict[str, Any] = {

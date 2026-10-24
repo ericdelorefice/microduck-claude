@@ -10,7 +10,11 @@ for confirmation against the live contract.
 
 from __future__ import annotations
 
+import http.client
 import logging
+import time
+import urllib.error
+import urllib.request
 from typing import Any
 
 from . import protocol as p
@@ -20,6 +24,22 @@ from .transport import JsonRpcError, UnixSocketTransport
 log = logging.getLogger("microduck_claude.robot.rpc")
 
 BATTERY_UNKNOWN = -1.0
+
+# Resend a drive twist at 10 Hz while driving for a duration: well inside robotd's ~500 ms
+# deadman, which zeros the twist if notifications stop arriving.
+_KEEPALIVE_INTERVAL_S = 0.1
+
+# Camera capture: validate the payload before it leaves the robot layer. The endpoint is
+# untrusted plumbing (a 200 can be an HTML error page or an MJPEG stream), and the Anthropic
+# per-image limit is 5 MB, so an over-limit or non-image frame is treated as "no frame".
+_MAX_FRAME_BYTES = 5 * 1024 * 1024
+_IMAGE_MAGIC: tuple[bytes, ...] = (b"\xff\xd8\xff", b"\x89PNG\r\n\x1a\n", b"GIF8")
+
+
+def _looks_like_image(data: bytes) -> bool:
+    if any(data.startswith(sig) for sig in _IMAGE_MAGIC):
+        return True
+    return data[:4] == b"RIFF" and data[8:12] == b"WEBP"  # WEBP
 
 
 class RpcRobot:
@@ -31,10 +51,12 @@ class RpcRobot:
         *,
         api_version: int = p.API_VERSION,
         subscribe_hz: float = 2.0,
+        camera_url: str = "",
     ) -> None:
         self._t = transport
         self._api_version = api_version
         self._subscribe_hz = subscribe_hz
+        self._camera_url = camera_url
 
     def handshake(self) -> dict[str, Any] | None:
         """Perform the ``hello`` handshake and start a state subscription."""
@@ -59,6 +81,15 @@ class RpcRobot:
 
     def stop(self) -> None:
         self._t.request(p.ROBOT_STOP)
+
+    def drive_for(self, vx: float, vy: float, vyaw: float, *, duration: float) -> None:
+        # Keep resending the twist so the walk policy stays engaged (robotd expires an intent
+        # ~500 ms after notifications stop), then stop. Blocks for roughly `duration`.
+        deadline = time.monotonic() + duration
+        while time.monotonic() < deadline:
+            self.drive(vx, vy, vyaw)
+            time.sleep(_KEEPALIVE_INTERVAL_S)
+        self.stop()
 
     def set_head(
         self,
@@ -108,6 +139,28 @@ class RpcRobot:
 
     def get_state(self) -> dict[str, object]:
         return self._t.latest_state() or {}
+
+    def capture_frame(self) -> bytes | None:
+        """Fetch one camera frame over HTTP and validate it (see RobotInterface).
+
+        Returns bytes only for a genuine, supported image within the model's size limit. A
+        non-image 200, an oversized frame, or a truncated/dropped response all yield None, so a
+        bad frame never becomes a model image block that would 400 the API.
+        """
+        if not self._camera_url:
+            return None
+        try:
+            with urllib.request.urlopen(self._camera_url, timeout=4.0) as response:
+                if getattr(response, "status", 200) != 200:
+                    return None
+                data: bytes = response.read(_MAX_FRAME_BYTES + 1)  # one extra byte flags oversize
+        except (urllib.error.URLError, OSError, ValueError, http.client.HTTPException):
+            return None
+        if not data or len(data) > _MAX_FRAME_BYTES:
+            return None
+        if not _looks_like_image(data):
+            return None
+        return data
 
     def get_battery(self) -> float:
         """Battery level 0..1, or ``BATTERY_UNKNOWN`` (-1.0) if unavailable.

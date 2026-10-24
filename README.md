@@ -1,50 +1,52 @@
 # microduck-claude
 
 A safe, conversational **Claude brain** for the Pollen Robotics × Hugging Face **Microduck** robot.
-Claude is the brain (it runs on your Mac or a server); the duck is the body. You talk to it, Claude
-converses and performs a small set of **allow-listed, confirmation-gated** tasks, and the duck's
-movement and expressions match.
+Claude runs on your Mac or a server; the duck is the body. You talk to it, Claude converses and performs
+a small set of **allow-listed, confirmation-gated** tasks, the duck moves and chirps to match — and it
+can now **see through its own camera**.
 
 > **Unofficial community project.** Not affiliated with, authorized, or endorsed by Pollen Robotics or
 > Hugging Face. "Microduck" is their product name; this project only *talks to* the robot's open
 > (Apache-2.0) software interface and vendors none of their code.
 
 Microduck ships as an action / reinforcement-learning robot with **no built-in voice or LLM** — this
-project adds the conversational layer on top, in the style of Pollen's Reachy Mini. See
-[`docs/PLAN.md`](docs/PLAN.md) for the full design and research (with sources and licenses) and
-[`CLAUDE.md`](CLAUDE.md) for the engineering guardrails.
+project adds the conversational layer on top, in the style of Pollen's Reachy Mini. Full design,
+research, and licenses are in [`docs/PLAN.md`](docs/PLAN.md); engineering guardrails in
+[`CLAUDE.md`](CLAUDE.md).
+
+## What it does
+
+- **Talks** — text chat, or a host **voice loop** (type, or a real mic via faster-whisper; replies
+  spoken through macOS `say`).
+- **Moves** — two dozen head/body **gestures** (including emotional ones), plus the sim's real tricks
+  (roulade, kicks); paced so they're actually visible on a real body.
+- **Sees** — a `see` tool grabs the duck's camera frame and hands it to Claude as an image, so it can
+  describe or react to what's in front of it. [`scripts/duck-cam.html`](scripts/duck-cam.html) shows the
+  live feed as a floating "body-cam."
+- **Explores** — a bounded `explore` roam: it creeps forward on its own, pausing to look, then reports
+  what it found (an action, behind the confirm / trust gate; the movement is slow and short).
+- **Remembers** — a local long-term memory (`remember` / `recall` / `forget`), writes gated.
+- **Stays safe** — allow-listed tools, read-only by default, a confirmation gate before any action, and
+  everything it hears / reads / sees treated as untrusted.
+
+Runs on the in-process **`fake`** backend (no hardware), a real **`duck-sim`**, or a physical robot —
+the same code behind one interface.
 
 ## Status
 
-- **Milestone 1 (done):** text chat → Claude → head/body gestures on an in-process `FakeRobot`, with a
-  fully tested safety layer. No hardware or simulator required.
-- **Milestone 2 (done):** `RpcRobot` drives a real **`duck-sim`** (or robot) over Microduck's
-  `duck-ipc-proto` **JSON-RPC 2.0 / NDJSON Unix-socket** contract — a drop-in for `FakeRobot`. Verified
-  end-to-end over a real socket against a faithful fake server; validate against a running `duck-sim`
-  or hardware when available.
-- **Milestone 3 (done):** a host **voice loop** — swappable STT/TTS, the duck reacting with motion +
-  chirps, and spoken yes/no action confirmation. `microduck-claude voice` runs it on the fake duck today
-  (type to "speak", hear replies via macOS `say`); a **real on-device microphone backend** (faster-whisper)
-  is available via the `[voice]` extra with `MICRODUCK_VOICE_INPUT=mic`.
-- **Playground (done):** `microduck-claude playground` opens a local web page that visualizes the fake
-  duck live (head, beak, pose, chirps) with a chat box and gesture-preview buttons — a hardware-free
-  test area, no robot required.
-- **Multiple models (done):** the brain runs on any model behind a provider-neutral `LLM` interface —
-  Claude via the official SDK (default), or any OpenAI-compatible server (OpenAI, or local models via
-  Ollama) with `MICRODUCK_LLM_PROVIDER=openai`.
-- **Expression, memory & persona (done):** 23 gestures incl. emotions; a local long-term memory
-  (`remember` / `recall` / `forget`, writes gated); and persona profiles (`MICRODUCK_PERSONA`).
-- **Speak through the duck (scaffolded):** `MICRODUCK_VOICE_OUTPUT=duck` renders TTS on the host and
-  plays it on the duck's speaker over SSH (`SshDuckTTS`); the command path is tested, pending validation
-  on a real board.
-- **Next / roadmap:** validate the SSH audio path + mic-in STT on hardware, and full hardware bring-up —
-  see [`docs/PLAN.md`](docs/PLAN.md) §7.
+Milestones 1–3 are **done**: a safety-tested text→gesture core on a `FakeRobot`; an `RpcRobot` that
+drives a real `duck-sim` / robot over Microduck's `duck-ipc-proto` (JSON-RPC 2.0 / NDJSON Unix socket);
+a host voice loop with spoken yes/no confirmation; vision; a hardware-free **playground** web
+visualizer; and a provider-neutral brain (Claude by default, or any OpenAI-compatible server). Speaking
+*through the duck's own speaker* over SSH is scaffolded and tested, pending on-board validation.
+**Next:** validate the SSH-audio and mic-in paths on hardware, and full bring-up — see
+[`docs/PLAN.md`](docs/PLAN.md) §7.
 
 ## Requirements
 
 - **Python 3.10+**
-- An Anthropic API key exported as **`ANTHROPIC_API_KEY`**. It is read **only** from the environment —
-  never asked for, stored, or logged.
+- An Anthropic API key as **`ANTHROPIC_API_KEY`** — read **only** from the environment; never asked for,
+  stored, or logged. (Or run a local model; see *Other models* below.)
 
 ## Setup
 
@@ -54,8 +56,7 @@ python3 -m venv .venv && source .venv/bin/activate
 pip install -e ".[dev]"
 ```
 
-`uv` works too and is the Pollen-ecosystem standard (`uv venv && uv pip install -e ".[dev]"`); it is not
-required for this project.
+`uv` works too (`uv venv && uv pip install -e ".[dev]"`).
 
 ## Usage
 
@@ -64,45 +65,20 @@ export ANTHROPIC_API_KEY=...     # you set this; the app never stores it
 microduck-claude chat
 ```
 
-This starts a text chat with the duck. The default **`fake`** backend needs no hardware — gestures run
-against an in-process robot and are printed as stage directions:
+The default **`fake`** backend needs no hardware — gestures run in-process and print as stage
+directions:
 
 ```
 🦆  Talk to your Microduck (backend=fake). Ctrl-D to quit.
 
-you › hey, can you look to your left?
-duck › Sure thing! Peeking left now. 👀
-      🦆 tilts its head
 you › do a little celebration
-duck › 🦆  The duck will perform the gesture 'dance'. Allow it? [y/N] y
+duck › 🦆  May I do a little dance? [y/N] y
 duck › Ta-da!
       🦆 shifts its body, *wheee*
 ```
 
-Read-only requests (the time, the gesture list, status) run freely; **any action is previewed and only
-runs after you confirm it**.
-
-### Configuration (environment variables)
-
-| Variable | Default | Meaning |
-|---|---|---|
-| `ANTHROPIC_API_KEY` | — | Anthropic key (required for the `anthropic` provider; env only). |
-| `MICRODUCK_LLM_PROVIDER` | `anthropic` | `anthropic` (Claude) or `openai` (OpenAI-compatible server). |
-| `MICRODUCK_MODEL` | provider default | Model name (`claude-opus-5-5`, or e.g. `llama3.2` for Ollama). |
-| `MICRODUCK_OPENAI_BASE_URL` | `http://localhost:11434/v1` | OpenAI-compatible endpoint (Ollama by default). |
-| `MICRODUCK_CLAUDE_MODEL` | `claude-opus-5-5` | (Legacy) Claude model; `MICRODUCK_MODEL` overrides it. |
-| `MICRODUCK_PERSONA` | `duckling` | Personality: `duckling`, `zen`, `scholar`, `grumpy`. |
-| `MICRODUCK_MEMORY_PATH` | `~/.microduck-claude/memory.json` | Where the duck stores what it remembers (local, never committed). |
-| `MICRODUCK_VOICE_OUTPUT` | `host` | `host` (Mac speaker) or `duck` (speak through the duck via SSH). |
-| `MICRODUCK_DUCK_SSH_HOST` | — | Duck's SSH host for `voice_output=duck` (auth via your own SSH keys). |
-| `MICRODUCK_DUCK_AUDIO_DEVICE` | `plughw:aic3104` | Duck ALSA device (`default` on the beta board). |
-| `MICRODUCK_VOICE_INPUT` | `stdin` | `stdin` (typed) or `mic` (microphone STT; needs `pip install '.[voice]'`). |
-| `MICRODUCK_STT_MODEL` | `base.en` | faster-whisper model for mic STT (e.g. `small.en`, `base`). |
-| `MICRODUCK_BARGE_IN` | `off` | Interrupt the duck mid-reply (host `say` + mic; experimental). |
-| `MICRODUCK_CLAUDE_MAX_TOKENS` | `4096` | Max response tokens. |
-| `MICRODUCK_ROBOT_BACKEND` | `fake` | `fake` (in-process) or `rpc` (real duck-sim / robot). |
-| `MICRODUCK_ROBOT_SOCKET` | `~/.cache/duck-sim/duck-a.sock` | Unix socket for the `rpc` backend. |
-| `MICRODUCK_API_VERSION` | `44` | `duck-ipc-proto` handshake version. |
+Read-only requests (the time, the gesture list, status, **what it sees**) run freely; **any action is
+previewed and only runs after you confirm it**.
 
 ### Voice mode
 
@@ -110,12 +86,27 @@ runs after you confirm it**.
 microduck-claude voice
 ```
 
-Talk to the duck. By default you type a line as your "speech"; install the voice extra
-(`pip install -e '.[voice]'`) and set `MICRODUCK_VOICE_INPUT=mic` for a **real microphone** (on-device
-faster-whisper, no cloud). Claude's replies are spoken via the macOS `say` command (or printed if `say`
-isn't available), and the duck reacts with motion + chirps. **Actions are confirmed by
-a spoken yes/no**, captured from the live mic only — a "yes" in the model's text or a tool result can
-never confirm one.
+Type a line as your "speech," or install the voice extra (`pip install -e '.[voice]'`) and set
+`MICRODUCK_VOICE_INPUT=mic` for a **real microphone** (on-device faster-whisper, no cloud). Replies are
+spoken via macOS `say`; the duck reacts with motion + chirps. **Actions are confirmed by a spoken yes/no
+from the live mic only** — a "yes" in the model's text or a tool result never counts.
+
+For a dry British-narrator manner, run with `MICRODUCK_PERSONA=narrator` — it pairs well with a
+measured `MICRODUCK_SAY_RATE` (e.g. `165`) and an en-GB voice like Daniel or Oliver.
+
+For a studio-grade narrator voice, set `MICRODUCK_VOICE_OUTPUT=elevenlabs` with `ELEVENLABS_API_KEY`
+(from your env) and `MICRODUCK_ELEVENLABS_VOICE=<voice id>` — a rich neural voice via
+[ElevenLabs](https://elevenlabs.io) (optional, cloud-based; the core stays on offline `say`). Grab a
+British-narrator voice id from your ElevenLabs Voice Library.
+
+### Vision & the duck-cam
+
+With a camera-enabled `duck-sim` (or robot), ask *"what do you see?"* — the `see` tool captures a frame
+and Claude describes it. To watch the feed yourself, open
+[`scripts/duck-cam.html`](scripts/duck-cam.html) in a browser: a live "body-cam" that reconnects on its
+own, with a **float** button that pins it always-on-top in a corner. It reads `MICRODUCK_CAMERA_URL`
+(default the duck-sim `mediad` `/frame` endpoint); run the sim with `DUCK_SIM_CAMERAS=a` to enable the
+camera.
 
 ### Playground
 
@@ -123,59 +114,67 @@ never confirm one.
 microduck-claude playground
 ```
 
-Opens a local web page (default `http://127.0.0.1:8777`) that **visualizes the fake duck live** — its
-head tilts, its beak opens, and chirps/gestures show as they happen — with a chat box and
-gesture-preview buttons. The visualization and gesture preview need **no API key**; the chat box uses
-your key if it's set. A hardware-free test area for the whole experience.
+A local web page (default `http://127.0.0.1:8777`) that **visualizes the fake duck live** — head, beak,
+pose, chirps — with a chat box and gesture buttons. The visualization needs no API key; the chat box
+uses your key if it's set.
 
-### Using other models (Ollama, OpenAI, …)
+### Other models (Ollama, OpenAI, …)
 
-The brain is provider-neutral. Keep Claude (the default), or point it at any OpenAI-compatible server:
+The brain is provider-neutral — keep Claude (the default) or point it at any OpenAI-compatible server:
 
 ```bash
-# Local models via Ollama (no API key):
-MICRODUCK_LLM_PROVIDER=openai MICRODUCK_MODEL=llama3.2 microduck-claude chat
-
-# OpenAI:
-MICRODUCK_LLM_PROVIDER=openai MICRODUCK_MODEL=gpt-4o-mini \
-  MICRODUCK_OPENAI_BASE_URL=https://api.openai.com/v1 OPENAI_API_KEY=sk-... microduck-claude chat
+MICRODUCK_LLM_PROVIDER=openai MICRODUCK_MODEL=llama3.2 microduck-claude chat   # local, no key
 ```
 
-Adding another provider means implementing the small `LLM` interface (`brain/llm.py`) — the open core
-depends on no provider beyond the Anthropic SDK.
+Adding a provider means implementing the small `LLM` interface in
+[`brain/llm.py`](src/microduck_claude/brain/llm.py); the open core depends on no provider beyond the
+Anthropic SDK. (Vision needs a multimodal model — text-only models simply skip the image.)
 
-## Driving the real simulator (optional)
+### Driving the real simulator
 
-The `rpc` backend speaks the same contract the real robot uses, so you can drive Pollen's **local
-simulator** on your Mac:
+The `rpc` backend speaks the robot's own contract, so it drives Pollen's local **`duck-sim`** on your
+Mac:
 
-1. Build and run `duck-sim` from [`pollen-robotics/microduck`](https://github.com/pollen-robotics/microduck)
-   (a Rust `cargo build` plus a `microduck_rl` MuJoCo environment; the script supports Apple Silicon).
-   It binds a control socket at `~/.cache/duck-sim/duck-a.sock`.
-2. Point this app at it:
+```bash
+export MICRODUCK_ROBOT_BACKEND=rpc      # socket defaults to ~/.cache/duck-sim/duck-a.sock
+microduck-claude chat
+```
 
-   ```bash
-   export MICRODUCK_ROBOT_BACKEND=rpc
-   # export MICRODUCK_ROBOT_SOCKET=~/.cache/duck-sim/duck-a.sock   # (default)
-   microduck-claude chat
-   ```
+Build/run `duck-sim` from
+[`pollen-robotics/microduck`](https://github.com/pollen-robotics/microduck) (a Rust build plus a
+`microduck_rl` MuJoCo environment; Apple Silicon supported). The same `RpcRobot` reaches a physical
+robot over an `ssh -L` forwarded socket. Contract details and the hardware roadmap are in
+[`docs/PLAN.md`](docs/PLAN.md).
 
-The same `RpcRobot` reaches a physical robot over an `ssh -L` forwarded socket. See
-[`docs/PLAN.md`](docs/PLAN.md) §2–§7 for the contract details and the hardware roadmap.
+### Configuration
 
-## Giving the duck a voice (planned)
+| Variable | Default | Meaning |
+|---|---|---|
+| `ANTHROPIC_API_KEY` | — | Anthropic key (required for the `anthropic` provider; env only). |
+| `MICRODUCK_LLM_PROVIDER` | `anthropic` | `anthropic` (Claude) or `openai` (OpenAI-compatible). |
+| `MICRODUCK_MODEL` | provider default | Model name (`claude-opus-5-5`, or e.g. `llama3.2`). |
+| `MICRODUCK_OPENAI_BASE_URL` | `http://localhost:11434/v1` | OpenAI-compatible endpoint (Ollama by default). |
+| `MICRODUCK_PERSONA` | `duckling` | `duckling`, `zen`, `scholar`, `grumpy`, `narrator`. |
+| `MICRODUCK_ROBOT_BACKEND` | `fake` | `fake` (in-process) or `rpc` (real duck-sim / robot). |
+| `MICRODUCK_ROBOT_SOCKET` | `~/.cache/duck-sim/duck-a.sock` | Unix socket for the `rpc` backend. |
+| `MICRODUCK_CAMERA_URL` | `http://127.0.0.1:8080/frame` | Camera snapshot endpoint for the `see` tool. |
+| `MICRODUCK_VOICE_INPUT` | `stdin` | `stdin` (typed) or `mic` (needs the `[voice]` extra). |
+| `MICRODUCK_VOICE_OUTPUT` | `host` | `host` (Mac speaker), `duck` (through the duck via SSH), or `elevenlabs` (cloud neural voice). |
 
-The JSON-RPC API only exposes a fixed voice-bank (`robot.sound`), but the robot plays audio via `aplay`
-on a Linux board you can SSH into — so host-rendered TTS can be streamed to its speaker (and its mic
-captured for STT) without firmware changes. This is a planned milestone with on-hardware validation;
-details and caveats are in [`docs/PLAN.md`](docs/PLAN.md) §2.4.
+Less-common knobs — `MICRODUCK_PERSONA` detail, `MICRODUCK_MEMORY_PATH`, `MICRODUCK_SAY_VOICE`, `MICRODUCK_SAY_RATE`, the `MICRODUCK_ELEVENLABS_*` settings,
+`MICRODUCK_BARGE_IN`, `MICRODUCK_TRUST`, `MICRODUCK_STT_MODEL`, the `MICRODUCK_DUCK_SSH_*` / audio-device settings,
+`MICRODUCK_API_VERSION`, `MICRODUCK_CLAUDE_MAX_TOKENS` — are listed in
+[`config.py`](src/microduck_claude/config.py).
 
 ## Safety
 
 Safety is built in, not bolted on (see [`docs/PLAN.md`](docs/PLAN.md) §6 and [`CLAUDE.md`](CLAUDE.md)):
-allow-listed tools, **read-only by default**, an explicit **confirmation gate** before any action, and
-everything the robot hears or reads treated as **untrusted input** (prompt injection). A "yes" produced
-by the model, or found inside tool output, never counts as your confirmation.
+allow-listed tools, **read-only by default**, a **confirmation gate** before any action — or a standing
+**trust mode** (`MICRODUCK_TRUST`) you switch on to skip the per-action prompt for safe actions — and
+everything the robot hears, reads, or sees treated as **untrusted input** (prompt injection). A "yes"
+produced by the model or found in tool output never counts as your confirmation, and nothing the duck
+hears, reads, or sees can enable trust mode. A consequential action (e.g. free locomotion) is confirmed
+even under trust.
 
 ## Development
 
@@ -189,11 +188,11 @@ CI (GitHub Actions) runs lint + type-check + tests on Python 3.10–3.12 with **
 
 ## Contributing
 
-Issues and PRs are welcome; the maintainer reviews and merges. Keep anything personal or private in your
-own separate package — the open core discovers optional tools through the
-`microduck_claude.tool_providers` entry-point group and depends on none of them.
+Issues and PRs are welcome. Keep anything personal or private in your own separate package — the open
+core discovers optional tools through the `microduck_claude.tool_providers` entry-point group and
+depends on none of them.
 
 ## License
 
 [Apache-2.0](LICENSE). Copyright the microduck-claude Authors. This project interoperates with the
-Apache-2.0 Microduck software; it does not include Pollen Robotics' code or hardware designs.
+Apache-2.0 Microduck software; it includes none of Pollen Robotics' code or hardware designs.
