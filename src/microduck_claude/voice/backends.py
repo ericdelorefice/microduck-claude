@@ -12,6 +12,7 @@ core so the package stays dependency-light and CI needs no audio hardware.
 
 from __future__ import annotations
 
+import http.client
 import json
 import os
 import shutil
@@ -194,7 +195,9 @@ class ElevenLabsTTS:
         }
         try:
             audio = self._fetch(url, body, headers)
-        except (urllib.error.URLError, OSError) as exc:
+        except (urllib.error.URLError, OSError, http.client.HTTPException) as exc:
+            # http.client.HTTPException (e.g. IncompleteRead on a dropped body) is NOT an
+            # OSError, so without it a truncated reply would crash the voice loop here.
             print(f"(ElevenLabs TTS failed: {exc})", file=sys.stderr)
             return
         if audio:

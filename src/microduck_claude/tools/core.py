@@ -7,6 +7,7 @@ NOT here — they belong in a private tool provider (see plugins/), never the co
 
 from __future__ import annotations
 
+import http.client
 import json
 import time
 import urllib.error
@@ -33,7 +34,12 @@ _NO_ARGS_SCHEMA: dict[str, Any] = {
 }
 
 
-_MAX_FRAME_BYTES = 8 * 1024 * 1024  # a single camera frame, not an endless MJPEG stream
+_MAX_FRAME_BYTES = 5 * 1024 * 1024  # the Anthropic per-image limit; a real frame is far smaller
+
+# Magic bytes for the image formats the vision models accept. The camera endpoint is untrusted
+# plumbing — a 200 can carry an HTML error page or an MJPEG multipart stream — so we verify the
+# payload really is a supported image before handing it to the model.
+_IMAGE_MAGIC: tuple[bytes, ...] = (b"\xff\xd8\xff", b"\x89PNG\r\n\x1a\n", b"GIF8")
 
 # Turning is a gait, not an instant pivot: the walk policy needs the yaw intent SUSTAINED to
 # engage (a brief command barely moves, and robotd's deadman zeros the twist between commands).
@@ -44,18 +50,35 @@ _TURN_DEG_PER_S = 20.0  # effective yaw rate once engaged (at |vyaw|=1.0)
 _TURN_MIN_S = 2.5  # minimum sustained turn, so the gait always engages
 
 
+def _looks_like_image(data: bytes) -> bool:
+    """True if ``data`` begins with the magic bytes of a model-supported image format."""
+    if any(data.startswith(sig) for sig in _IMAGE_MAGIC):
+        return True
+    return data[:4] == b"RIFF" and data[8:12] == b"WEBP"  # WEBP
+
+
 def _capture_camera_png(url: str, *, timeout: float = 4.0) -> bytes | None:
-    """GET a single image frame from the duck's camera console, or None if unavailable."""
+    """GET a single camera frame, or None if it is unavailable or not a usable image.
+
+    Returns bytes only for a genuine, supported image within the model's per-image size limit.
+    A non-image 200 (an HTML error page, an MJPEG stream), an oversized frame, or a truncated /
+    dropped response all yield None — so a bad frame never becomes an image block that would 400
+    the API and poison the conversation; the caller just reports that no camera is available.
+    """
     if not url:
         return None
     try:
         with urllib.request.urlopen(url, timeout=timeout) as response:
             if getattr(response, "status", 200) != 200:
                 return None
-            data: bytes = response.read(_MAX_FRAME_BYTES)
-    except (urllib.error.URLError, OSError, ValueError):
+            data: bytes = response.read(_MAX_FRAME_BYTES + 1)  # one extra byte flags oversize
+    except (urllib.error.URLError, OSError, ValueError, http.client.HTTPException):
         return None
-    return data or None
+    if not data or len(data) > _MAX_FRAME_BYTES:
+        return None  # missing, or larger than the model will accept
+    if not _looks_like_image(data):
+        return None  # a 200 that is not actually a supported image
+    return data
 
 
 def build_core_tools(

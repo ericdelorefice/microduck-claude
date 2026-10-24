@@ -67,3 +67,17 @@ def test_elevenlabs_never_prints_the_key_on_failure(capsys) -> None:
 
     ElevenLabsTTS("super-secret", "V", fetch=boom, player=lambda _a: None).speak("hi")
     assert "super-secret" not in capsys.readouterr().err
+
+
+def test_elevenlabs_survives_a_truncated_response(capsys) -> None:
+    import http.client
+
+    def truncated(url: str, data: bytes, headers: dict[str, str]) -> bytes:
+        # IncompleteRead (a dropped body) is an HTTPException, not an OSError.
+        raise http.client.IncompleteRead(b"partial")
+
+    # Must not raise — the voice loop keeps going and reports the failure without the key.
+    ElevenLabsTTS("super-secret", "V", fetch=truncated, player=lambda _a: None).speak("hi")
+    err = capsys.readouterr().err
+    assert "ElevenLabs TTS failed" in err
+    assert "super-secret" not in err

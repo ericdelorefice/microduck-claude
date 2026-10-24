@@ -1,7 +1,8 @@
 from __future__ import annotations
 
 import base64
-from typing import cast
+import http.client
+from typing import Any, cast
 
 import pytest
 
@@ -11,6 +12,59 @@ from microduck_claude.robot import FakeRobot
 from microduck_claude.tools import Risk
 from microduck_claude.tools import core as tools_core
 from tests.fakes import FakeAnthropic, text_response
+
+_PNG = b"\x89PNG\r\n\x1a\n"  # a valid PNG signature
+
+
+class _FakeHTTPResponse:
+    """A minimal urlopen() context manager returning canned bytes."""
+
+    def __init__(self, data: bytes, status: int = 200, truncate: bool = False) -> None:
+        self._data = data
+        self.status = status
+        self._truncate = truncate
+
+    def __enter__(self) -> _FakeHTTPResponse:
+        return self
+
+    def __exit__(self, *exc: object) -> None:
+        return None
+
+    def read(self, amt: int = -1) -> bytes:
+        if self._truncate:
+            raise http.client.IncompleteRead(b"partial")
+        return self._data[:amt] if amt is not None and amt >= 0 else self._data
+
+
+def _patch_camera(monkeypatch: pytest.MonkeyPatch, response: _FakeHTTPResponse) -> None:
+    def fake_urlopen(url: Any, timeout: float = 0) -> _FakeHTTPResponse:
+        return response
+
+    monkeypatch.setattr(tools_core.urllib.request, "urlopen", fake_urlopen)
+
+
+def test_capture_accepts_a_small_valid_image(monkeypatch: pytest.MonkeyPatch) -> None:
+    frame = _PNG + b"tiny-pixels"
+    _patch_camera(monkeypatch, _FakeHTTPResponse(frame))
+    assert tools_core._capture_camera_png("http://cam/frame") == frame
+
+
+def test_capture_rejects_a_non_image_payload(monkeypatch: pytest.MonkeyPatch) -> None:
+    # A 200 that is actually an HTML error page or an MJPEG stream must not reach the model.
+    _patch_camera(monkeypatch, _FakeHTTPResponse(b"<html>500 Internal Server Error</html>"))
+    assert tools_core._capture_camera_png("http://cam/frame") is None
+
+
+def test_capture_rejects_an_oversized_frame(monkeypatch: pytest.MonkeyPatch) -> None:
+    big = _PNG + b"x" * (6 * 1024 * 1024)  # over the 5 MB per-image limit
+    _patch_camera(monkeypatch, _FakeHTTPResponse(big))
+    assert tools_core._capture_camera_png("http://cam/frame") is None
+
+
+def test_capture_handles_a_truncated_response(monkeypatch: pytest.MonkeyPatch) -> None:
+    # http.client.IncompleteRead is not an OSError; it must still be caught, not raised.
+    _patch_camera(monkeypatch, _FakeHTTPResponse(b"", truncate=True))
+    assert tools_core._capture_camera_png("http://cam/frame") is None
 
 
 def test_see_tool_returns_a_camera_image(monkeypatch: pytest.MonkeyPatch) -> None:
