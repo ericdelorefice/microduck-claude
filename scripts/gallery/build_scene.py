@@ -107,8 +107,15 @@ def painting_body(name, file, aspect, phi_deg, hero, real_h, style):
     parts += tier("fi", 0.0, t1, z1, liner)  # inner gilt liner
     parts += tier("fm", t1, t2, z2, mid)  # middle band (style)
     parts += tier("fo", t1 + t2, t3, z3, outer)  # outer band (style)
+    # Placard beside the painting. Past the frame the curved wall bulges back toward the room, so a
+    # placard at the painting's depth would poke through it. Push it proud by just enough that its
+    # outer tangential corner clears the inner wall face (same idea as the painting mount radius).
+    lx = hw + fw + 0.11
+    lz = pr - math.sqrt(max((RIN - 0.02) ** 2 - (lx + 0.098) ** 2, 0.25))
+    lz = max(0.015, min(lz, 0.30))
     parts.append(
-        f'            <geom name="label_{name}" type="box" size="0.098 0.056 0.004" pos="{hw + fw + 0.14:.3f} {-(hh * 0.3):.3f} 0.015" material="pl_{name}" contype="0" conaffinity="0" group="1"/>'
+        f'            <geom name="label_{name}" type="box" size="0.098 0.056 0.004" '
+        f'pos="{lx:.3f} {-(hh * 0.3):.3f} {lz:.3f}" material="pl_{name}" contype="0" conaffinity="0" group="1"/>'
     )
     parts.append("        </body>")
     return "\n".join(parts)
