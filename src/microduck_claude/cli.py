@@ -7,7 +7,7 @@ import os
 import sys
 import webbrowser
 
-from .assembly import build_registry
+from .assembly import build_registry, build_roam_registry
 from .brain import LLM, Brain, MissingAPIKeyError, build_llm, system_prompt_for
 from .config import Config
 from .memory import MemoryStore
@@ -50,6 +50,20 @@ class ConsoleConfirmer:
         except EOFError:
             return False
         return answer in {"y", "yes"}
+
+
+class _RoamAuthorizer:
+    """The launch-time authorization for one bounded, sim-only autonomous roam.
+
+    Explore mode has no human in the loop, so launching ``microduck-claude explore``
+    (after the sim-backend guard in ``_run_explore``) is itself the user-channel
+    authorization for the roam. It is a fixed code path — nothing the duck hears, reads,
+    or sees reaches it — and it is used only with the restricted roam registry
+    (perception + locomotion), so it can never approve a memory write or an acrobatic trick.
+    """
+
+    def confirm(self, prompt: str) -> bool:
+        return True
 
 
 _VERBS = {
@@ -119,13 +133,20 @@ def _run(*, voice: bool, explore: bool = False) -> int:
     # Hold each gesture step briefly on a real body (the sim) so motion is visible;
     # the in-process FakeRobot stays instant.
     gesture_pace = 0.35 if config.robot_backend == "rpc" else 0.0
-    registry = build_registry(
-        robot, memory=memory, gesture_pace=gesture_pace, camera_url=config.camera_url
-    )
+    # Explore roams autonomously, so it gets a restricted allow-list (perception + locomotion);
+    # chat/voice get the full tool set, including memory.
+    if explore:
+        registry = build_roam_registry(
+            robot, gesture_pace=gesture_pace, camera_url=config.camera_url
+        )
+    else:
+        registry = build_registry(
+            robot, memory=memory, gesture_pace=gesture_pace, camera_url=config.camera_url
+        )
     system = system_prompt_for(config.persona)
     try:
         if explore:
-            _run_explore(llm, robot, registry, system, config)
+            return _run_explore(llm, robot, registry, system, config)
         elif voice:
             _run_voice(llm, robot, registry, system, config)
         else:
@@ -177,16 +198,27 @@ def _run_chat(
 
 def _run_explore(
     llm: LLM, robot: RobotInterface, registry: ToolRegistry, system: str, config: Config
-) -> None:
+) -> int:
     """Autonomous gallery exploration: the duck roams and identifies what it sees on its own.
 
-    Trust is ON for this session — launching ``explore`` IS the user's authorization for this
-    bounded, sim-safe roaming (there is no user in the loop to confirm each step). The safety core
-    is unchanged: nothing the duck hears/reads/sees can enable trust or satisfy a confirmation, and
-    on a real body the confirmation gate + hardware limits (PLAN §6) must be in place before
-    autonomous locomotion is used.
+    Launching ``explore`` is the user-channel authorization for this one bounded roam — there
+    is no human in the loop to confirm each step — so a pre-authorizing confirmer approves the
+    restricted roam allow-list (perception + locomotion only; see ``build_roam_registry``). The
+    safety core is unchanged: nothing the duck hears/reads/sees reaches that authorizer, and the
+    registry cannot invoke a memory write or an acrobatic trick. Autonomous locomotion is only
+    sim-safe, so it is refused on the rpc backend unless ``MICRODUCK_EXPLORE_ALLOW_RPC`` confirms
+    it points at the simulator (a real body needs the PLAN §6 hardware limits first).
     """
-    dispatcher = Dispatcher(registry, ConsoleConfirmer(), trust=True)
+    if config.robot_backend != "fake" and not config.explore_allow_rpc:
+        print(
+            f"Refusing to explore autonomously on the {config.robot_backend!r} backend: free "
+            "locomotion with no one in the loop is only sim-safe. Point this at the duck-sim and "
+            "set MICRODUCK_EXPLORE_ALLOW_RPC=1 to confirm it is the simulator, not a real body "
+            "(a real body needs the hardware limits in PLAN §6 first).",
+            file=sys.stderr,
+        )
+        return 1
+    dispatcher = Dispatcher(registry, _RoamAuthorizer())
     brain = Brain(llm, registry, dispatcher, system=system, max_tool_iterations=8)
     rounds = 15
 
@@ -223,6 +255,7 @@ def _run_explore(
         print("\n(stopped exploring)")
     finally:
         robot.stop()  # never leave the duck moving when exploration ends
+    return 0
 
 
 def _mic_stt_available() -> bool:

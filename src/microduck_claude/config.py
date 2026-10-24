@@ -39,6 +39,10 @@ class Config:
     stt_model: str = "base.en"
     barge_in: bool = False
     trust: bool = False  # standing OK for actions (MICRODUCK_TRUST); content never enables it
+    # Opt-in to run autonomous `explore` on the rpc backend. The rpc backend serves BOTH the
+    # duck-sim and a real body, so autonomous locomotion there is refused unless the operator
+    # sets this to confirm it points at the simulator (a real body needs PLAN §6 limits first).
+    explore_allow_rpc: bool = False
 
     @classmethod
     def from_env(cls) -> Config:
@@ -71,6 +75,8 @@ class Config:
             stt_model=os.environ.get("MICRODUCK_STT_MODEL", "base.en"),
             barge_in=os.environ.get("MICRODUCK_BARGE_IN", "").lower() in ("1", "true", "yes", "on"),
             trust=os.environ.get("MICRODUCK_TRUST", "").lower() in ("1", "true", "yes", "on"),
+            explore_allow_rpc=os.environ.get("MICRODUCK_EXPLORE_ALLOW_RPC", "").lower()
+            in ("1", "true", "yes", "on"),
         )
 
 

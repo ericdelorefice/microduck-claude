@@ -104,6 +104,15 @@ class Dispatcher:
         auto_approved = False
         if tool.risk is Risk.ACTION:
             always = getattr(tool, "confirm_always", False)
+            # A tool may also mark a *specific* call consequential (e.g. an acrobatic
+            # gesture). If the predicate errors, fail safe and require confirmation.
+            confirm_when = getattr(tool, "confirm_when", None)
+            if callable(confirm_when):
+                try:
+                    if confirm_when(arguments):
+                        always = True
+                except Exception:
+                    always = True
             if self._trust and not always:
                 auto_approved = True
                 log.info("auto-approved action %r (trust mode on)", name)

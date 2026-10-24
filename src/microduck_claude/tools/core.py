@@ -19,6 +19,7 @@ from ..expressions import (
     UnknownGestureError,
     gesture_catalog,
     gesture_names,
+    is_consequential_gesture,
     perform_gesture,
 )
 from ..robot import JsonRpcError
@@ -280,6 +281,9 @@ def build_core_tools(
             gesture_schema,
             _perform_gesture,
             preview=_gesture_preview,
+            # A nod can auto-run under trust, but a dynamic trick (roulade/kick) is
+            # consequential and must be confirmed even under trust (CLAUDE.md #4).
+            confirm_when=lambda a: is_consequential_gesture(a.get("gesture")),
         ),
         FunctionTool(
             "explore",
@@ -289,6 +293,7 @@ def build_core_tools(
             _NO_ARGS_SCHEMA,
             _explore,
             preview=_explore_preview,
+            confirm_always=True,  # free locomotion: confirmed even under trust (CLAUDE.md #4)
         ),
         FunctionTool(
             "turn",
@@ -299,5 +304,6 @@ def build_core_tools(
             turn_schema,
             _turn,
             preview=_turn_preview,
+            confirm_always=True,  # free locomotion (a walking pivot): confirmed even under trust
         ),
     ]

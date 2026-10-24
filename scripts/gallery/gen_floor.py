@@ -65,7 +65,7 @@ img[star] = gold
 ring(r, 0.0, 0.05, nero)  # centre boss
 
 img = np.clip(img, 0, 1)
-Image.fromarray((img * 255).astype(np.uint8)).save(
-    Path(__file__).resolve().parents[2] / "scenes" / "textures" / "marble_compass.png"
-)
+out = Path(__file__).resolve().parents[2] / "scenes" / "textures" / "marble_compass.png"
+out.parent.mkdir(parents=True, exist_ok=True)  # scenes/textures/ is gitignored, so may not exist
+Image.fromarray((img * 255).astype(np.uint8)).save(out)
 print("wrote scenes/textures/marble_compass.png")

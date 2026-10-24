@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import pytest
 
+from microduck_claude.assembly import build_roam_registry
 from microduck_claude.robot import FakeRobot
 from microduck_claude.tools import FunctionTool, Risk, ToolRegistry, ToolResult, build_core_tools
 
@@ -49,3 +50,20 @@ def test_specs_have_api_shape() -> None:
     registry.register(_tool("x"))
     spec = registry.specs()[0]
     assert set(spec) == {"name", "description", "input_schema"}
+
+
+def test_roam_registry_is_perception_and_locomotion_only() -> None:
+    # Autonomous explore mode must not be able to invoke anything that writes or is
+    # irreversible: the restricted allow-list is the gate (CLAUDE.md guardrail #4).
+    registry = build_roam_registry(FakeRobot())
+    assert set(registry.names()) == {
+        "see",
+        "look_around",
+        "turn",
+        "explore",
+        "get_time",
+        "get_robot_status",
+        "list_gestures",
+    }
+    assert "perform_gesture" not in registry  # no acrobatic tricks headless
+    assert "forget" not in registry and "remember" not in registry  # no memory writes headless

@@ -39,6 +39,19 @@ def gesture_catalog() -> list[tuple[str, str]]:
     return [(g.name, g.description) for g in sorted(GESTURES.values(), key=lambda g: g.name)]
 
 
+def is_consequential_gesture(name: object) -> bool:
+    """True if ``name`` is a dynamic whole-body trick (e.g. a somersault or kick).
+
+    Such gestures must be confirmed even under trust mode (CLAUDE.md guardrail #4),
+    so the ``perform_gesture`` tool gates them per-call. Unknown or non-string names
+    are treated as not-consequential here; ``perform_gesture`` rejects them separately.
+    """
+    if not isinstance(name, str):
+        return False
+    gesture = GESTURES.get(name)
+    return gesture is not None and gesture.consequential
+
+
 class _PacedRobot:
     """Wraps a robot so each motion is held briefly.
 
@@ -97,5 +110,6 @@ __all__ = [
     "UnknownGestureError",
     "gesture_catalog",
     "gesture_names",
+    "is_consequential_gesture",
     "perform_gesture",
 ]

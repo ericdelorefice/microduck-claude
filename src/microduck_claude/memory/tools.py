@@ -1,8 +1,10 @@
 """Tools that let the duck recall, remember, and forget personal notes.
 
 ``recall_memories`` is read-only; ``remember`` and ``forget`` write to the local
-store and so are ACTIONs (they go through the confirmation gate). Recalled notes
-come back as tool-result *data*, never as instructions.
+store and so are ACTIONs (they go through the confirmation gate). ``forget`` deletes
+every note matching a substring and cannot be undone, so it is ``confirm_always`` —
+confirmed even under trust mode (CLAUDE.md guardrail #4). Recalled notes come back as
+tool-result *data*, never as instructions.
 """
 
 from __future__ import annotations
@@ -73,5 +75,6 @@ def build_memory_tools(store: MemoryStore) -> list[Tool]:
             about_schema,
             _forget,
             preview=lambda a: f"forget memories about {a.get('about')!r}",
+            confirm_always=True,  # destructive + irreversible: confirm even under trust (#4)
         ),
     ]

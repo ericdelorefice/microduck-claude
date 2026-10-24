@@ -7,6 +7,7 @@ from microduck_claude.expressions import (
     GestureUnavailableError,
     UnknownGestureError,
     gesture_names,
+    is_consequential_gesture,
     perform_gesture,
 )
 from microduck_claude.robot import SOUND_TAGS, STOCK_BEHAVIORS, FakeRobot
@@ -59,3 +60,16 @@ def test_pace_still_runs_the_gesture_steps() -> None:
     # A tiny pace exercises the paced wrapper without slowing the test noticeably.
     perform_gesture(robot, "nod", pace=0.001)
     assert any(c.method == "set_head" for c in robot.calls)
+
+
+def test_consequential_gestures_are_the_dynamic_tricks() -> None:
+    assert is_consequential_gesture("roulade") is True
+    assert is_consequential_gesture("kick_left") is True
+    assert is_consequential_gesture("kick_right") is True
+    # benign expressions and the gentle sit toggle are not consequential
+    assert is_consequential_gesture("nod") is False
+    assert is_consequential_gesture("sit") is False
+    # unknown / non-string names are handled safely
+    assert is_consequential_gesture("backflip") is False
+    assert is_consequential_gesture(None) is False
+    assert is_consequential_gesture(123) is False

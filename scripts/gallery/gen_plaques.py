@@ -6,6 +6,7 @@ from pathlib import Path
 from PIL import Image, ImageDraw, ImageFont
 
 OUT = str(Path(__file__).resolve().parents[2] / "scenes" / "textures")
+Path(OUT).mkdir(parents=True, exist_ok=True)  # scenes/textures/ is gitignored, so may not exist
 PLAQUES = {
     "mona": ("MONA LISA", "Leonardo da Vinci  ·  c.1503"),
     "starry": ("THE STARRY NIGHT", "Vincent van Gogh  ·  1889"),

@@ -52,3 +52,19 @@ def test_memory_writes_are_gated_but_recall_is_free(tmp_path: Path) -> None:
 
     # 'recall_memories' is read-only: runs without a confirmation.
     assert declining.dispatch("recall_memories", {}).outcome is Outcome.EXECUTED
+
+
+def test_forget_is_confirmed_even_under_trust(tmp_path: Path) -> None:
+    # 'forget' is destructive and irreversible, so it must be confirmed even under trust
+    # (CLAUDE.md guardrail #4) — unlike the benign, trust-covered memory actions.
+    store = MemoryStore(tmp_path / "m.json")
+    store.add("the user likes tea")
+    registry = build_registry(FakeRobot(), memory=store)
+    forget = registry.get("forget")
+    assert forget is not None
+    assert getattr(forget, "confirm_always", False) is True
+
+    trusting_but_declining = Dispatcher(registry, CallbackConfirmer(lambda _p: False), trust=True)
+    result = trusting_but_declining.dispatch("forget", {"about": "tea"})
+    assert result.outcome is Outcome.DECLINED_BY_USER  # trust did not skip the prompt
+    assert store.all() == ["the user likes tea"]  # nothing was deleted

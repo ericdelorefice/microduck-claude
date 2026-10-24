@@ -42,7 +42,7 @@ img[r < 0.085] = glow
 img[r > 0.94] = gold
 
 img = np.clip(img, 0, 1)
-Image.fromarray((img * 255).astype(np.uint8)).save(
-    Path(__file__).resolve().parents[2] / "scenes" / "textures" / "dome_ceiling.png"
-)
+out = Path(__file__).resolve().parents[2] / "scenes" / "textures" / "dome_ceiling.png"
+out.parent.mkdir(parents=True, exist_ok=True)  # scenes/textures/ is gitignored, so may not exist
+Image.fromarray((img * 255).astype(np.uint8)).save(out)
 print("wrote scenes/textures/dome_ceiling.png")

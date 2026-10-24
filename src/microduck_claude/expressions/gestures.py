@@ -31,6 +31,7 @@ class Gesture:
     description: str
     run: GestureFn | None = None
     skill: str | None = None
+    consequential: bool = False  # a dynamic whole-body trick: confirm even under trust
 
 
 def _nod(robot: RobotInterface) -> None:
@@ -175,9 +176,24 @@ _ALL: tuple[Gesture, ...] = (
     Gesture("confused", "Tilt and glance about with a puzzled chirp.", _confused),
     Gesture("dance", "A short celebratory wiggle with a sound.", _dance),
     Gesture("sit", "Sit down or stand up (needs a robot that supports it).", skill="sit_toggle"),
-    Gesture("roulade", "A forward roll / somersault — a real trained trick.", skill="roulade"),
-    Gesture("kick_left", "A left-footed kick — a real trained trick.", skill="kick_left"),
-    Gesture("kick_right", "A right-footed kick — a real trained trick.", skill="kick_right"),
+    Gesture(
+        "roulade",
+        "A forward roll / somersault — a real trained trick.",
+        skill="roulade",
+        consequential=True,
+    ),
+    Gesture(
+        "kick_left",
+        "A left-footed kick — a real trained trick.",
+        skill="kick_left",
+        consequential=True,
+    ),
+    Gesture(
+        "kick_right",
+        "A right-footed kick — a real trained trick.",
+        skill="kick_right",
+        consequential=True,
+    ),
     Gesture("sad", "Droop the head and sink a little, with a soft sound.", _sad),
     Gesture("angry", "Lean in and shake, with an alarmed sound.", _angry),
     Gesture("surprised", "Jerk the head up and rise, with a surprised chirp.", _surprised),
