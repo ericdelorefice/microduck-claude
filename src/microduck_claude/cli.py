@@ -194,7 +194,13 @@ def _run_chat(
 
 
 def _run_explore(
-    llm: LLM, robot: RobotInterface, registry: ToolRegistry, system: str, config: Config
+    llm: LLM,
+    robot: RobotInterface,
+    registry: ToolRegistry,
+    system: str,
+    config: Config,
+    *,
+    tts: TextToSpeech | None = None,
 ) -> int:
     """Autonomous gallery exploration: the duck roams and identifies what it sees on its own.
 
@@ -205,6 +211,10 @@ def _run_explore(
     registry cannot invoke a memory write or an acrobatic trick. Autonomous locomotion is only
     sim-safe, so it is refused on the rpc backend unless ``MICRODUCK_EXPLORE_ALLOW_RPC`` confirms
     it points at the simulator (a real body needs the PLAN §6 hardware limits first).
+
+    The duck narrates each observation aloud through the configured voice (set
+    ``MICRODUCK_SAY_VOICE`` / ``MICRODUCK_SAY_RATE``) and prints it too, so the terminal shows
+    the captions. ``tts`` is injectable for tests.
     """
     if config.robot_backend != "fake" and not config.explore_allow_rpc:
         print(
@@ -215,6 +225,11 @@ def _run_explore(
             file=sys.stderr,
         )
         return 1
+    # The duck narrates its tour aloud (the demo payoff). With no audio backend (PrintTTS) it
+    # just prints; the terminal always shows the text so it can be burned in as captions.
+    if tts is None:
+        tts, _, _ = _build_voice_tts(config)
+    narrate = None if isinstance(tts, PrintTTS) else tts.speak
     dispatcher = Dispatcher(registry, _RoamAuthorizer())
     brain = Brain(llm, registry, dispatcher, system=system, max_tool_iterations=8)
     rounds = 15
@@ -247,6 +262,8 @@ def _run_explore(
                 break
             for text in turn.texts:
                 print(f"duck › {text}")
+                if narrate is not None:
+                    narrate(text)
             message = follow
     except KeyboardInterrupt:
         print("\n(stopped exploring)")
