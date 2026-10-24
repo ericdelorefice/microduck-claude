@@ -10,7 +10,7 @@ from __future__ import annotations
 import base64
 from typing import Any
 
-from .llm import LLMResponse, ToolCall, ToolResult
+from .llm import NOT_RUN, LLMResponse, ToolCall, ToolResult
 
 DEFAULT_MODEL = "claude-opus-5-5"
 
@@ -46,8 +46,28 @@ class AnthropicLLM:
         self._messages = []
 
     def send_user(self, text: str) -> LLMResponse:
-        self._messages.append({"role": "user", "content": text})
+        # Every tool_use must be answered by the next message, or the API rejects the request
+        # (and every request after it). Close out any the last turn left open.
+        open_ids = self._unanswered_tool_ids()
+        if open_ids:
+            content: list[dict[str, Any]] = [
+                {"type": "tool_result", "tool_use_id": i, "content": NOT_RUN, "is_error": True}
+                for i in open_ids
+            ]
+            content.append({"type": "text", "text": text})
+            self._messages.append({"role": "user", "content": content})
+        else:
+            self._messages.append({"role": "user", "content": text})
         return self._complete()
+
+    def _unanswered_tool_ids(self) -> list[str]:
+        if not self._messages or self._messages[-1]["role"] != "assistant":
+            return []
+        return [
+            block.id
+            for block in self._messages[-1]["content"]
+            if getattr(block, "type", None) == "tool_use"
+        ]
 
     def send_tool_results(self, results: list[ToolResult]) -> LLMResponse:
         content = [self._tool_result_block(r) for r in results]

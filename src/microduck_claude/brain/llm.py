@@ -13,6 +13,10 @@ from __future__ import annotations
 from dataclasses import dataclass, field
 from typing import Any, Protocol
 
+# Adapters answer a tool call left open when a turn ended early (the brain's per-turn tool
+# cap) with this, so the next request is still a valid conversation.
+NOT_RUN = "Not run: that turn ended before this tool call was answered."
+
 
 @dataclass
 class ToolCall:

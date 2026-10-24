@@ -13,7 +13,7 @@ import urllib.error
 import urllib.request
 from typing import Any
 
-from .llm import LLMResponse, ToolCall, ToolResult
+from .llm import NOT_RUN, LLMResponse, ToolCall, ToolResult
 
 
 class OpenAICompatError(RuntimeError):
@@ -43,6 +43,14 @@ class OpenAICompatLLM:
         self._messages = [{"role": "system", "content": system}] if system else []
 
     def send_user(self, text: str) -> LLMResponse:
+        # Every tool call needs a "tool" reply before the next user message; close out any
+        # the last turn left open (the brain's per-turn tool cap).
+        last = self._messages[-1] if self._messages else {}
+        if last.get("role") == "assistant":
+            for call in last.get("tool_calls") or []:
+                self._messages.append(
+                    {"role": "tool", "tool_call_id": str(call.get("id", "")), "content": NOT_RUN}
+                )
         self._messages.append({"role": "user", "content": text})
         return self._complete()
 

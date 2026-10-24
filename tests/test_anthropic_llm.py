@@ -1,6 +1,9 @@
 from __future__ import annotations
 
-from microduck_claude.brain import AnthropicLLM, ToolResult
+from microduck_claude.assembly import build_registry
+from microduck_claude.brain import AnthropicLLM, Brain, ToolResult
+from microduck_claude.robot import FakeRobot
+from microduck_claude.safety import CallbackConfirmer, Dispatcher
 from tests.fakes import FakeAnthropic, refusal_response, text_response, tool_response
 
 
@@ -36,3 +39,24 @@ def test_refusal() -> None:
     llm = AnthropicLLM(FakeAnthropic([refusal_response()]), model="m", max_tokens=9)
     llm.start("S", [])
     assert llm.send_user("x").refused is True
+
+
+def test_tool_cap_does_not_leave_an_unanswered_tool_use() -> None:
+    # A turn that hits max_tool_iterations ends with a tool_use the brain never answered. The
+    # API requires every tool_use to be answered by the next message, so without a close-out
+    # every later turn in the conversation would be rejected.
+    client = FakeAnthropic(
+        [tool_response(f"t{i}", "get_time", {}) for i in range(3)] + [text_response("hi")]
+    )
+    robot = FakeRobot()
+    registry = build_registry(robot)
+    dispatcher = Dispatcher(registry, CallbackConfirmer(lambda _p: True))
+    brain = Brain(AnthropicLLM(client), registry, dispatcher, system="S", max_tool_iterations=2)
+    brain.send("keep checking the time")
+    assert brain.send("hello again").texts == ["hi"]
+    last = client.messages.calls[-1]["messages"][-1]
+    assert last["role"] == "user"
+    assert last["content"][0]["type"] == "tool_result"
+    assert last["content"][0]["tool_use_id"] == "t2"
+    assert last["content"][0]["is_error"] is True
+    assert last["content"][-1] == {"type": "text", "text": "hello again"}

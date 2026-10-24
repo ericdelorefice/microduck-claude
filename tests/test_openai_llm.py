@@ -99,3 +99,17 @@ def test_tool_call_roundtrip() -> None:
         tool_msg = fake.requests[1]["messages"][-1]
         assert tool_msg["role"] == "tool"
         assert tool_msg["tool_call_id"] == "c1"
+
+
+def test_unanswered_tool_call_is_closed_before_the_next_user_message() -> None:
+    # If a turn ends with a tool call unanswered (the brain's tool cap), the next request must
+    # still answer it, or OpenAI-compatible servers reject the conversation.
+    with _FakeOpenAI([_tool("c1", "do", {}), _text("hi")]) as fake:
+        llm = OpenAICompatLLM(model="m", base_url=fake.base_url)
+        llm.start("S", [])
+        llm.send_user("go")
+        assert llm.send_user("hello again").texts == ["hi"]
+        messages = fake.requests[1]["messages"]
+        assert messages[-2]["role"] == "tool"
+        assert messages[-2]["tool_call_id"] == "c1"
+        assert messages[-1] == {"role": "user", "content": "hello again"}
