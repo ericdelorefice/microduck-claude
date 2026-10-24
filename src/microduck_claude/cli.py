@@ -121,6 +121,7 @@ def _run(*, voice: bool, explore: bool = False) -> int:
             config.robot_backend,
             socket_path=config.robot_socket,
             api_version=config.api_version,
+            camera_url=config.camera_url,
         )
     except (OSError, JsonRpcError) as exc:
         print(
@@ -133,26 +134,12 @@ def _run(*, voice: bool, explore: bool = False) -> int:
     # Hold each gesture step briefly on a real body (the sim) so motion is visible;
     # the in-process FakeRobot stays instant.
     gesture_pace = 0.35 if config.robot_backend == "rpc" else 0.0
-    # On a live body (rpc) the walk policy needs drive intents streamed at 10 Hz to engage; the
-    # in-process FakeRobot does not. This is about the transport, not pacing, so it is its own flag.
-    stream_velocity = config.robot_backend == "rpc"
     # Explore roams autonomously, so it gets a restricted allow-list (perception + locomotion);
-    # chat/voice get the full tool set, including memory.
+    # chat/voice get the full tool set, including memory. (The robot owns camera + keep-alive.)
     if explore:
-        registry = build_roam_registry(
-            robot,
-            gesture_pace=gesture_pace,
-            camera_url=config.camera_url,
-            stream_velocity=stream_velocity,
-        )
+        registry = build_roam_registry(robot, gesture_pace=gesture_pace)
     else:
-        registry = build_registry(
-            robot,
-            memory=memory,
-            gesture_pace=gesture_pace,
-            camera_url=config.camera_url,
-            stream_velocity=stream_velocity,
-        )
+        registry = build_registry(robot, memory=memory, gesture_pace=gesture_pace)
     system = system_prompt_for(config.persona)
     try:
         if explore:
