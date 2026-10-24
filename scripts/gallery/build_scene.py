@@ -219,7 +219,7 @@ def build_xml():
     <include file="robot_groundcontact.xml" />
 
     <visual>
-        <headlight ambient="0.30 0.29 0.27" diffuse="0.18 0.17 0.15" specular="0.05 0.05 0.05"/>
+        <headlight ambient="0.24 0.23 0.21" diffuse="0.18 0.17 0.15" specular="0.05 0.05 0.05"/>
         <quality shadowsize="2048"/>
         <map haze="0.12"/>
         <rgba haze="0.90 0.86 0.78 1"/>
@@ -238,7 +238,7 @@ def build_xml():
         <material name="wood" rgba="0.26 0.15 0.08 1" specular="0.3" shininess="0.5" emission="0.04"/>
         <material name="ebony" rgba="0.09 0.08 0.08 1" specular="0.45" shininess="0.65" emission="0.03"/>
         <material name="fresco" texture="t_fresco" texuniform="false" texrepeat="1 1" emission="0.55" specular="0.1" shininess="0.2"/>
-        <material name="compass" texture="t_compass" texuniform="false" texrepeat="1 1" specular="0.3" shininess="0.4" reflectance="0.2" emission="0.05"/>
+        <material name="compass" texture="t_compass" texuniform="false" texrepeat="1 1" specular="0.1" shininess="0.3" reflectance="0.04" emission="0.03"/>
         <material name="marble" rgba="0.92 0.90 0.86 1" specular="0.2" shininess="0.2" reflectance="0"/>
 {chr(10).join(tex)}
 {chr(10).join(mats)}
@@ -246,11 +246,11 @@ def build_xml():
 
     <worldbody>
         <!-- scene lights: fixed in the world so shading is stable as the camera orbits -->
-        <light name="oculus" type="spot" pos="0 0 {H - 0.35:.2f}" dir="0 0 -1" cutoff="62" exponent="10" diffuse="0.34 0.32 0.27" specular="0.1 0.1 0.1" castshadow="true"/>
-        <light name="wash_px" type="directional" dir="1 0 -0.7" diffuse="0.30 0.28 0.25" specular="0 0 0" castshadow="false"/>
-        <light name="wash_nx" type="directional" dir="-1 0 -0.7" diffuse="0.30 0.28 0.25" specular="0 0 0" castshadow="false"/>
-        <light name="wash_py" type="directional" dir="0 1 -0.7" diffuse="0.30 0.28 0.25" specular="0 0 0" castshadow="false"/>
-        <light name="wash_ny" type="directional" dir="0 -1 -0.7" diffuse="0.30 0.28 0.25" specular="0 0 0" castshadow="false"/>
+        <light name="oculus" type="spot" pos="0 0 {H - 0.35:.2f}" dir="0 0 -1" cutoff="62" exponent="10" diffuse="0.20 0.19 0.16" specular="0.1 0.1 0.1" castshadow="true"/>
+        <light name="wash_px" type="directional" dir="1 0 -0.7" diffuse="0.17 0.16 0.14" specular="0 0 0" castshadow="false"/>
+        <light name="wash_nx" type="directional" dir="-1 0 -0.7" diffuse="0.17 0.16 0.14" specular="0 0 0" castshadow="false"/>
+        <light name="wash_py" type="directional" dir="0 1 -0.7" diffuse="0.17 0.16 0.14" specular="0 0 0" castshadow="false"/>
+        <light name="wash_ny" type="directional" dir="0 -1 -0.7" diffuse="0.17 0.16 0.14" specular="0 0 0" castshadow="false"/>
 
         <!-- collidable floor plane (physics); marble colour, shows outside the room -->
         <geom name="floor" size="0 0 0.05" pos="0 0 0" type="plane" material="marble"/>
