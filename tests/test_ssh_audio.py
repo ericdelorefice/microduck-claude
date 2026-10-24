@@ -63,3 +63,13 @@ def test_ssh_duck_tts_renders_then_plays() -> None:
 
     SshDuckTTS(_Renderer(), SshDuckAudio(SshTarget("h"), runner=runner)).speak("hi")
     assert stdins == [b"Whi"]
+
+
+def test_mac_say_wav_renderer_never_reads_text_as_an_option() -> None:
+    seen: list[list[str]] = []
+
+    def runner(cmd: Sequence[str]) -> None:
+        seen.append(list(cmd))
+
+    MacSayWavRenderer(runner=runner).render("-o/tmp/elsewhere.wav")
+    assert seen[0][-2:] == ["--", "-o/tmp/elsewhere.wav"]

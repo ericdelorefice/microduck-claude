@@ -104,7 +104,7 @@ class MacSayWavRenderer:
             cmd = ["say", "-o", str(out), "--data-format=LEI16@22050"]
             if self._voice:
                 cmd += ["-v", self._voice]
-            cmd.append(text)
+            cmd += ["--", text]  # a reply starting with "-" is speech, not a `say` option
             self._runner(cmd)
             try:
                 return out.read_bytes()
