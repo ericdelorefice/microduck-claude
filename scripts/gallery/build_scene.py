@@ -26,12 +26,12 @@ PAINT = f"{REPO}/scenes/paintings"
 TEX = f"{REPO}/scenes/textures"
 OUT_SCENE = f"{MICRODUCK}/scene_gallery.xml"
 
-R = 3.6        # drum apothem (panel-midpoint radius)
-NP = 40        # drum panels (smoother curve at this radius)
-H = 2.8        # drum height / dome springing
+R = 3.6  # drum apothem (panel-midpoint radius)
+NP = 40  # drum panels (smoother curve at this radius)
+H = 2.8  # drum height / dome springing
 WALL_T = 0.05  # wall half-thickness
-RIN = R - WALL_T   # inner wall face radius
-PZ = 0.88      # painting centre height (natural gallery hang, clears the floor)
+RIN = R - WALL_T  # inner wall face radius
+PZ = 0.88  # painting centre height (natural gallery hang, clears the floor)
 
 
 def qz(a):
@@ -41,13 +41,15 @@ def qz(a):
 def qmul(a, b):
     aw, ax, ay, az = a
     bw, bx, by, bz = b
-    return (aw * bw - ax * bx - ay * by - az * bz,
-            aw * bx + ax * bw + ay * bz - az * by,
-            aw * by - ax * bz + ay * bw + az * bx,
-            aw * bz + ax * by - ay * bx + az * bw)
+    return (
+        aw * bw - ax * bx - ay * by - az * bz,
+        aw * bx + ax * bw + ay * bz - az * by,
+        aw * by - ax * bz + ay * bw + az * bx,
+        aw * bz + ax * by - ay * bx + az * bw,
+    )
 
 
-Q0 = (0.7071067811865476, 0.7071067811865476, 0.0, 0.0)   # +Y-wall base: +Z->inward, +Y->up
+Q0 = (0.7071067811865476, 0.7071067811865476, 0.0, 0.0)  # +Y-wall base: +Z->inward, +Y->up
 
 
 def paint_quat(phi):
@@ -80,21 +82,21 @@ def painting_body(name, file, aspect, phi_deg, hero, real_h, style):
     phi = math.radians(phi_deg)
     hh = real_h / 2
     hw = hh * aspect
-    fw = (0.10 if hero else 0.085) * (2 * max(hh, hw))    # total frame face width
-    fd = 0.07 if hero else 0.055                           # frame depth (proud of wall)
+    fw = (0.10 if hero else 0.085) * (2 * max(hh, hw))  # total frame face width
+    fd = 0.07 if hero else 0.055  # frame depth (proud of wall)
     # mount so even the frame's outer corners stay INSIDE the curved wall (no poke-through)
     pr = math.sqrt(max(RIN * RIN - (hw + fw) ** 2, 1.0)) - 0.03
-    t1, t2, t3 = fw * 0.22, fw * 0.33, fw * 0.45          # inner liner / middle / outer bands
-    z1, z2, z3 = fd * 0.45, fd * 0.72, fd                 # stepped proudness -> carved molding
+    t1, t2, t3 = fw * 0.22, fw * 0.33, fw * 0.45  # inner liner / middle / outer bands
+    z1, z2, z3 = fd * 0.45, fd * 0.72, fd  # stepped proudness -> carved molding
     px, py = pr * math.cos(phi), pr * math.sin(phi)
 
     def tier(tag, off, w, pz, mat):
         oe, c = hw + off + w, hh + off + w / 2
         return [
-            f'            <geom name="{tag}_{name}_t" type="box" size="{oe:.3f} {w/2:.3f} {pz/2:.3f}" pos="0 {c:.3f} {pz/2:.3f}" material="{mat}" contype="0" conaffinity="0" group="1"/>',
-            f'            <geom name="{tag}_{name}_b" type="box" size="{oe:.3f} {w/2:.3f} {pz/2:.3f}" pos="0 {-c:.3f} {pz/2:.3f}" material="{mat}" contype="0" conaffinity="0" group="1"/>',
-            f'            <geom name="{tag}_{name}_l" type="box" size="{w/2:.3f} {hh:.3f} {pz/2:.3f}" pos="{-(hw+off+w/2):.3f} 0 {pz/2:.3f}" material="{mat}" contype="0" conaffinity="0" group="1"/>',
-            f'            <geom name="{tag}_{name}_r" type="box" size="{w/2:.3f} {hh:.3f} {pz/2:.3f}" pos="{hw+off+w/2:.3f} 0 {pz/2:.3f}" material="{mat}" contype="0" conaffinity="0" group="1"/>',
+            f'            <geom name="{tag}_{name}_t" type="box" size="{oe:.3f} {w / 2:.3f} {pz / 2:.3f}" pos="0 {c:.3f} {pz / 2:.3f}" material="{mat}" contype="0" conaffinity="0" group="1"/>',
+            f'            <geom name="{tag}_{name}_b" type="box" size="{oe:.3f} {w / 2:.3f} {pz / 2:.3f}" pos="0 {-c:.3f} {pz / 2:.3f}" material="{mat}" contype="0" conaffinity="0" group="1"/>',
+            f'            <geom name="{tag}_{name}_l" type="box" size="{w / 2:.3f} {hh:.3f} {pz / 2:.3f}" pos="{-(hw + off + w / 2):.3f} 0 {pz / 2:.3f}" material="{mat}" contype="0" conaffinity="0" group="1"/>',
+            f'            <geom name="{tag}_{name}_r" type="box" size="{w / 2:.3f} {hh:.3f} {pz / 2:.3f}" pos="{hw + off + w / 2:.3f} 0 {pz / 2:.3f}" material="{mat}" contype="0" conaffinity="0" group="1"/>',
         ]
 
     parts = [
@@ -102,23 +104,27 @@ def painting_body(name, file, aspect, phi_deg, hero, real_h, style):
         f'            <geom name="canvas_{name}" type="box" size="{hw:.3f} {hh:.3f} 0.008" material="m_{name}" contype="0" conaffinity="0" group="1"/>',
     ]
     liner, mid, outer = STYLES[style]
-    parts += tier("fi", 0.0, t1, z1, liner)              # inner gilt liner
-    parts += tier("fm", t1, t2, z2, mid)                 # middle band (style)
-    parts += tier("fo", t1 + t2, t3, z3, outer)          # outer band (style)
-    parts.append(f'            <geom name="label_{name}" type="box" size="0.098 0.056 0.004" pos="{hw+fw+0.14:.3f} {-(hh*0.3):.3f} 0.015" material="pl_{name}" contype="0" conaffinity="0" group="1"/>')
+    parts += tier("fi", 0.0, t1, z1, liner)  # inner gilt liner
+    parts += tier("fm", t1, t2, z2, mid)  # middle band (style)
+    parts += tier("fo", t1 + t2, t3, z3, outer)  # outer band (style)
+    parts.append(
+        f'            <geom name="label_{name}" type="box" size="0.098 0.056 0.004" pos="{hw + fw + 0.14:.3f} {-(hh * 0.3):.3f} 0.015" material="pl_{name}" contype="0" conaffinity="0" group="1"/>'
+    )
     parts.append("        </body>")
     return "\n".join(parts)
 
 
 def drum():
     out = []
-    hw = R * math.tan(math.pi / NP) * 1.03   # +3% so panels overlap at corners (no seams)
+    hw = R * math.tan(math.pi / NP) * 1.03  # +3% so panels overlap at corners (no seams)
     for i in range(NP):
         th = 2 * math.pi * i / NP
         px, py = R * math.cos(th), R * math.sin(th)
-        out.append(f'        <geom name="drum_{i}" type="box" size="{hw:.4f} 0.05 {H / 2:.3f}" '
-                   f'pos="{px:.4f} {py:.4f} {H / 2:.3f}" quat="{qs(qz(th + math.pi / 2))}" '
-                   f'material="wall" contype="0" conaffinity="0" group="1"/>')
+        out.append(
+            f'        <geom name="drum_{i}" type="box" size="{hw:.4f} 0.05 {H / 2:.3f}" '
+            f'pos="{px:.4f} {py:.4f} {H / 2:.3f}" quat="{qs(qz(th + math.pi / 2))}" '
+            f'material="wall" contype="0" conaffinity="0" group="1"/>'
+        )
     return "\n".join(out)
 
 
@@ -129,27 +135,35 @@ def cornice():
     for i in range(NP):
         th = 2 * math.pi * i / NP
         c, s = math.cos(th), math.sin(th)
-        out.append(f'        <geom name="cor_{i}" type="box" size="{hw:.4f} 0.05 0.06" '
-                   f'pos="{RIN * c:.4f} {RIN * s:.4f} {H:.3f}" quat="{qs(qz(th + math.pi / 2))}" '
-                   f'material="gold" contype="0" conaffinity="0" group="1"/>')
+        out.append(
+            f'        <geom name="cor_{i}" type="box" size="{hw:.4f} 0.05 0.06" '
+            f'pos="{RIN * c:.4f} {RIN * s:.4f} {H:.3f}" quat="{qs(qz(th + math.pi / 2))}" '
+            f'material="gold" contype="0" conaffinity="0" group="1"/>'
+        )
     return "\n".join(out)
 
 
 def pilasters():
     out = []
-    n = 6                                  # one per gap between the 6 paintings (never behind one)
-    sh_h = (H - 0.30) / 2                 # shaft half-height (room for capital + base)
+    n = 6  # one per gap between the 6 paintings (never behind one)
+    sh_h = (H - 0.30) / 2  # shaft half-height (room for capital + base)
     for k in range(n):
         th = math.radians(30) + 2 * math.pi * k / n
         c, s = math.cos(th), math.sin(th)
         q = qs(qz(th + math.pi / 2))
         px, py = (R - 0.07) * c, (R - 0.07) * s
-        out.append(f'        <geom name="pil_{k}" type="box" size="0.10 0.05 {sh_h:.3f}" '
-                   f'pos="{px:.4f} {py:.4f} {0.12 + sh_h:.3f}" quat="{q}" material="pilaster" contype="0" conaffinity="0" group="1"/>')
-        out.append(f'        <geom name="cap_{k}" type="box" size="0.13 0.06 0.05" '
-                   f'pos="{px:.4f} {py:.4f} {H - 0.12:.3f}" quat="{q}" material="gold" contype="0" conaffinity="0" group="1"/>')
-        out.append(f'        <geom name="base_{k}" type="box" size="0.12 0.06 0.06" '
-                   f'pos="{px:.4f} {py:.4f} 0.06" quat="{q}" material="gold" contype="0" conaffinity="0" group="1"/>')
+        out.append(
+            f'        <geom name="pil_{k}" type="box" size="0.10 0.05 {sh_h:.3f}" '
+            f'pos="{px:.4f} {py:.4f} {0.12 + sh_h:.3f}" quat="{q}" material="pilaster" contype="0" conaffinity="0" group="1"/>'
+        )
+        out.append(
+            f'        <geom name="cap_{k}" type="box" size="0.13 0.06 0.05" '
+            f'pos="{px:.4f} {py:.4f} {H - 0.12:.3f}" quat="{q}" material="gold" contype="0" conaffinity="0" group="1"/>'
+        )
+        out.append(
+            f'        <geom name="base_{k}" type="box" size="0.12 0.06 0.06" '
+            f'pos="{px:.4f} {py:.4f} 0.06" quat="{q}" material="gold" contype="0" conaffinity="0" group="1"/>'
+        )
     return "\n".join(out)
 
 
@@ -192,7 +206,9 @@ def build_xml():
         tex.append(f'        <texture type="2d" name="t_{n}" file="{PAINT}/{p[1]}"/>')
         tex.append(f'        <texture type="2d" name="t_pl_{n}" file="{TEX}/plaque_{n}.png"/>')
         mats.append(f'        <material name="m_{n}" texture="t_{n}" texuniform="false"/>')
-        mats.append(f'        <material name="pl_{n}" texture="t_pl_{n}" texuniform="false" texrepeat="1 1" emission="0.28"/>')
+        mats.append(
+            f'        <material name="pl_{n}" texture="t_pl_{n}" texuniform="false" texrepeat="1 1" emission="0.28"/>'
+        )
     bodies = "".join(painting_body(*p) for p in PAINTINGS)
     return f"""<mujoco model="gallery">
     <!-- Cathedral rotunda for the Microduck. Drum = {NP} tangent panels (R={R}); flat fresco ceiling
@@ -267,9 +283,9 @@ def render(scene, cam_cfg, out, w=1280, h=960):
     d.ctrl[:] = m.key_ctrl[k]
     mujoco.mj_forward(m, d)
     r = mujoco.Renderer(m, h, w)
-    if isinstance(cam_cfg, str):                 # fixed camera defined in the scene
+    if isinstance(cam_cfg, str):  # fixed camera defined in the scene
         r.update_scene(d, camera=cam_cfg)
-    else:                                        # free orbit camera
+    else:  # free orbit camera
         cam = mujoco.MjvCamera()
         mujoco.mjv_defaultFreeCamera(m, cam)
         cam.lookat[:] = cam_cfg["lookat"]
@@ -278,6 +294,7 @@ def render(scene, cam_cfg, out, w=1280, h=960):
         cam.elevation = cam_cfg["elevation"]
         r.update_scene(d, cam)
     from PIL import Image
+
     Image.fromarray(r.render()).save(out)
     print("rendered", out, "ngeom", m.ngeom, "nlight", m.nlight)
 
@@ -287,7 +304,13 @@ if __name__ == "__main__":
         f.write(build_xml())
     print("wrote", OUT_SCENE)
     if "--preview" in sys.argv:  # optional offscreen previews (needs mujoco), via free cameras
-        render(OUT_SCENE, {"lookat": [0.5, 0, 0.6], "distance": 1.7, "azimuth": 0, "elevation": -4},
-               f"{REPO}/scenes/rot_hero.png")
-        render(OUT_SCENE, {"lookat": [0.3, 0, 0.4], "distance": 1.5, "azimuth": 0, "elevation": -6},
-               f"{REPO}/scenes/rot_duck.png")
+        render(
+            OUT_SCENE,
+            {"lookat": [0.5, 0, 0.6], "distance": 1.7, "azimuth": 0, "elevation": -4},
+            f"{REPO}/scenes/rot_hero.png",
+        )
+        render(
+            OUT_SCENE,
+            {"lookat": [0.3, 0, 0.4], "distance": 1.5, "azimuth": 0, "elevation": -6},
+            f"{REPO}/scenes/rot_duck.png",
+        )

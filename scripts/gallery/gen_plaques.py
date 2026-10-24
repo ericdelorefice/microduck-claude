@@ -20,12 +20,16 @@ GOLD = (176, 142, 52)
 INK = (38, 30, 22)
 GREY = (90, 80, 68)
 
-FONTS = ["/System/Library/Fonts/Supplemental/Georgia Bold.ttf",
-         "/System/Library/Fonts/Supplemental/Times New Roman Bold.ttf",
-         "/Library/Fonts/Georgia Bold.ttf"]
-FONTS_R = ["/System/Library/Fonts/Supplemental/Georgia.ttf",
-           "/System/Library/Fonts/Supplemental/Times New Roman.ttf",
-           "/Library/Fonts/Georgia.ttf"]
+FONTS = [
+    "/System/Library/Fonts/Supplemental/Georgia Bold.ttf",
+    "/System/Library/Fonts/Supplemental/Times New Roman Bold.ttf",
+    "/Library/Fonts/Georgia Bold.ttf",
+]
+FONTS_R = [
+    "/System/Library/Fonts/Supplemental/Georgia.ttf",
+    "/System/Library/Fonts/Supplemental/Times New Roman.ttf",
+    "/Library/Fonts/Georgia.ttf",
+]
 
 
 def load(paths, size):

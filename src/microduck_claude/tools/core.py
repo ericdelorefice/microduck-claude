@@ -38,9 +38,9 @@ _MAX_FRAME_BYTES = 8 * 1024 * 1024  # a single camera frame, not an endless MJPE
 # engage (a brief command barely moves, and robotd's deadman zeros the twist between commands).
 # So a turn streams for a startup runway plus an angle-proportional time, with a floor so even a
 # small turn actually pivots. Rates are approximate — the model sees the result and can turn again.
-_TURN_START_S = 1.2       # gait startup before meaningful rotation
-_TURN_DEG_PER_S = 20.0    # effective yaw rate once engaged (at |vyaw|=1.0)
-_TURN_MIN_S = 2.5         # minimum sustained turn, so the gait always engages
+_TURN_START_S = 1.2  # gait startup before meaningful rotation
+_TURN_DEG_PER_S = 20.0  # effective yaw rate once engaged (at |vyaw|=1.0)
+_TURN_MIN_S = 2.5  # minimum sustained turn, so the gait always engages
 
 
 def _capture_camera_png(url: str, *, timeout: float = 4.0) -> bytes | None:

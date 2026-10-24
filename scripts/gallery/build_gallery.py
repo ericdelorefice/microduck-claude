@@ -26,7 +26,13 @@ from pathlib import Path
 
 HERE = Path(__file__).resolve().parent
 # Order matters: assets first, then the scene that references them.
-STEPS = ["gen_floor.py", "gen_dome_texture.py", "gen_plaques.py", "gen_dome_mesh.py", "build_scene.py"]
+STEPS = [
+    "gen_floor.py",
+    "gen_dome_texture.py",
+    "gen_plaques.py",
+    "gen_dome_mesh.py",
+    "build_scene.py",
+]
 
 
 def main() -> None:
