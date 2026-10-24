@@ -44,8 +44,9 @@ class FasterWhisperSTT:
         audio = self._recorder()
         if audio is None:
             return None
-        text = self._transcriber(audio).strip()
-        return Utterance(text) if text else None
+        # An empty transcript (a cough, a door, the duck's own chirp) is an empty utterance,
+        # which the loop skips. None means "end the session", so it is only for a stopped mic.
+        return Utterance(self._transcriber(audio).strip())
 
 
 def _mic_recorder(samplerate: int) -> Recorder:
