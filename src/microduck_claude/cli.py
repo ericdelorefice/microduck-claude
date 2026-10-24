@@ -52,6 +52,19 @@ class ConsoleConfirmer:
         return answer in {"y", "yes"}
 
 
+class ExploreSessionConfirmer:
+    """The confirmer for ``microduck-claude explore``: launching it IS the user's OK.
+
+    The user authorises this session's bounded roaming on the user channel (the command line)
+    before it starts, so each locomotion step is approved here and printed. Nothing the duck
+    hears, reads, or sees reaches this; chat and voice still ask for every move.
+    """
+
+    def confirm(self, prompt: str) -> bool:
+        print(f"🦆  {prompt} — yes (you launched explore)")
+        return True
+
+
 _VERBS = {
     "set_head": "tilts its head",
     "look_at": "looks over",
@@ -186,7 +199,7 @@ def _run_explore(
     on a real body the confirmation gate + hardware limits (PLAN §6) must be in place before
     autonomous locomotion is used.
     """
-    dispatcher = Dispatcher(registry, ConsoleConfirmer(), trust=True)
+    dispatcher = Dispatcher(registry, ExploreSessionConfirmer(), trust=True)
     brain = Brain(llm, registry, dispatcher, system=system, max_tool_iterations=8)
     rounds = 15
 

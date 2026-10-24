@@ -82,3 +82,27 @@ def test_tool_error_is_captured_not_raised() -> None:
     result = dispatcher.dispatch("boom", {})
     assert result.outcome is Outcome.ERROR
     assert result.is_error
+
+
+def test_trust_mode_still_confirms_locomotion() -> None:
+    # explore and turn walk the body, so they are confirmed even under trust (CLAUDE.md #4);
+    # under trust alone, a model nudged by something the duck saw could walk it unprompted.
+    for name, args in (("explore", {}), ("turn", {"degrees": 90})):
+        robot = FakeRobot()
+        confirmer = RecordingConfirmer(answer=False)
+        dispatcher = Dispatcher(build_registry(robot), confirmer, trust=True)
+        result = dispatcher.dispatch(name, args)
+        assert result.outcome is Outcome.DECLINED_BY_USER, name
+        assert confirmer.prompts, name  # it asked, even under trust
+        assert not any(c.method == "drive" for c in robot.calls), name  # the duck never moved
+
+
+def test_explore_session_confirmer_approves_its_own_roaming() -> None:
+    # `microduck-claude explore` is the user's standing OK for that session's locomotion.
+    from microduck_claude.cli import ExploreSessionConfirmer
+
+    robot = FakeRobot()
+    dispatcher = Dispatcher(build_registry(robot), ExploreSessionConfirmer(), trust=True)
+    dispatcher.dispatch("turn", {"degrees": 90})
+    assert any(c.method == "drive" for c in robot.calls)
+    assert robot.calls[-1].method != "drive"

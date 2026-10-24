@@ -289,6 +289,7 @@ def build_core_tools(
             _NO_ARGS_SCHEMA,
             _explore,
             preview=_explore_preview,
+            confirm_always=True,  # locomotion: confirmed even under trust (CLAUDE.md #4)
         ),
         FunctionTool(
             "turn",
@@ -299,5 +300,6 @@ def build_core_tools(
             turn_schema,
             _turn,
             preview=_turn_preview,
+            confirm_always=True,  # locomotion: confirmed even under trust (CLAUDE.md #4)
         ),
     ]
