@@ -26,6 +26,10 @@ from ..robot.interface import RobotInterface
 class SpeechReactor:
     """Drives small expressive movements around listening and speaking."""
 
+    # Hard cap on one utterance's animation so a stuck TTS (e.g. a hung audio player that never
+    # returns) cannot leave the beak/head moving forever; a real reply finishes well within this.
+    _MAX_ANIMATION_S = 120.0
+
     def __init__(self, robot: RobotInterface, *, period: float = 0.13) -> None:
         self._robot = robot
         self._period = period
@@ -59,7 +63,9 @@ class SpeechReactor:
         the jaw passive); the mouth command animates the beak on real hardware.
         """
         down = False
-        while not stop.is_set():
+        for _cycle in range(max(1, int(self._MAX_ANIMATION_S / self._period))):
+            if stop.is_set():
+                break
             self._safe(self._robot.set_mouth, 0.6 if down else 0.1)
             self._safe(self._robot.set_head, head_pitch=0.04 if down else -0.12)
             down = not down

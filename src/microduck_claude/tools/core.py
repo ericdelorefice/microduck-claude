@@ -82,13 +82,20 @@ def _capture_camera_png(url: str, *, timeout: float = 4.0) -> bytes | None:
 
 
 def build_core_tools(
-    robot: RobotInterface, *, gesture_pace: float = 0.0, camera_url: str = ""
+    robot: RobotInterface,
+    *,
+    gesture_pace: float = 0.0,
+    camera_url: str = "",
+    stream_velocity: bool = False,
 ) -> list[Tool]:
     """Build the core tool set, bound to a particular robot.
 
-    ``gesture_pace`` holds each gesture step for that many seconds so motion is visible on
-    a real body; it defaults to 0 (instant) for the FakeRobot and tests. ``camera_url`` is
-    the duck's camera snapshot endpoint for the ``see`` tool (empty = no camera).
+    ``gesture_pace`` holds each motion step for that many seconds so it is visible on a real
+    body (0 = instant, for the FakeRobot and tests). ``stream_velocity`` resends drive intents
+    at 10 Hz so the walk policy actually engages on a live body — this is a property of the
+    transport (the real robotd expires an intent ~500 ms after commands stop), NOT of pacing, so
+    it is passed explicitly, not inferred from ``gesture_pace``. ``camera_url`` is the duck's
+    camera snapshot endpoint for the vision tools (empty = no camera).
     """
 
     def _get_time(_: dict[str, Any]) -> ToolResult:
@@ -101,15 +108,34 @@ def build_core_tools(
     def _robot_status(_: dict[str, Any]) -> ToolResult:
         return ToolResult(json.dumps(robot.get_state(), default=str, sort_keys=True))
 
-    def _see(_: dict[str, Any]) -> ToolResult:
+    def _camera_result(got: str, missing: str) -> ToolResult:
+        """Capture a frame and return it as the view, or an honest 'no camera' result."""
         png = _capture_camera_png(camera_url)
         if png is None:
-            return ToolResult(
-                "no camera is available right now (run the sim with a camera, e.g. "
-                "DUCK_SIM_CAMERAS=a, or check the duck's camera is streaming)",
-                ok=False,
-            )
-        return ToolResult("Here is what the duck's camera sees right now.", image_png=png)
+            return ToolResult(missing, ok=False)
+        return ToolResult(got, image_png=png)
+
+    def _sustain_drive(*, vx: float, vy: float, vyaw: float, seconds: float) -> None:
+        # Drive the body and always stop. On a live body resend the twist at 10 Hz for
+        # `seconds` so the walk policy engages (robotd's deadman zeros an intent ~500 ms after
+        # commands stop); otherwise record a single intent (FakeRobot / tests).
+        try:
+            if stream_velocity:
+                deadline = time.monotonic() + seconds
+                while time.monotonic() < deadline:
+                    robot.drive(vx=vx, vy=vy, vyaw=vyaw)
+                    time.sleep(0.1)
+            else:
+                robot.drive(vx=vx, vy=vy, vyaw=vyaw)
+        finally:
+            robot.stop()
+
+    def _see(_: dict[str, Any]) -> ToolResult:
+        return _camera_result(
+            "Here is what the duck's camera sees right now.",
+            "no camera is available right now (run the sim with a camera, e.g. "
+            "DUCK_SIM_CAMERAS=a, or check the duck's camera is streaming)",
+        )
 
     def _look_around(_: dict[str, Any]) -> ToolResult:
         # Looking is perception, not a gated action — the head movement is just how the duck
@@ -121,16 +147,10 @@ def build_core_tools(
         robot.set_head(head_pitch=-0.2)  # settle facing forward, looking up a little
         if gesture_pace:
             time.sleep(gesture_pace)
-        png = _capture_camera_png(camera_url)
-        if png is None:
-            return ToolResult(
-                "I looked around, but my camera isn't available right now "
-                "(run the sim with DUCK_SIM_CAMERAS=a, or check the camera is streaming).",
-                ok=False,
-            )
-        return ToolResult(
+        return _camera_result(
             "I looked around — here's the view ahead after sweeping left and right.",
-            image_png=png,
+            "I looked around, but my camera isn't available right now "
+            "(run the sim with DUCK_SIM_CAMERAS=a, or check the camera is streaming).",
         )
 
     def _perform_gesture(arguments: dict[str, Any]) -> ToolResult:
@@ -155,37 +175,22 @@ def build_core_tools(
         return f"do a little {arguments.get('gesture')}"
 
     def _explore(_: dict[str, Any]) -> ToolResult:
-        # A bounded, safe autonomous roam: two short forward legs, looking between them.
-        # The caps live here (not with the model), and the duck always stops at the end.
-        # The walk policy needs the move intent *sustained* for a couple of seconds to take
-        # real steps — robotd expires an intent ~500 ms after they stop arriving, so we resend
-        # at 10 Hz (that same expiry also stops the duck on its own). Sim-safe as written; a
-        # physical robot needs hardware limits (speed cap, tilt/bump stop, a kill) first — PLAN.
+        # A bounded, safe autonomous roam: two short forward legs, looking between them. The
+        # caps live here (not with the model) and the duck always stops at the end. Sim-safe as
+        # written; a physical robot needs hardware limits (speed cap, tilt/bump stop, a kill)
+        # first — see PLAN §6.
         try:
             for _leg in range(2):
-                if gesture_pace:  # a real body: sustain the velocity so the policy actually walks
-                    deadline = time.monotonic() + 2.5
-                    while time.monotonic() < deadline:
-                        robot.drive(vx=0.45, vy=0.0, vyaw=0.0)  # 0.15 is too gentle to start a gait
-                        time.sleep(0.1)
-                else:  # FakeRobot / tests: record one intent, no streaming
-                    robot.drive(vx=0.3, vy=0.0, vyaw=0.0)
-                robot.stop()
+                _sustain_drive(vx=0.45, vy=0.0, vyaw=0.0, seconds=2.5)
                 robot.set_head(head_pitch=-0.2)  # look ahead after the leg
                 if gesture_pace:
                     time.sleep(gesture_pace)
         finally:
             robot.stop()  # never leave the duck driving
-        png = _capture_camera_png(camera_url)
-        if png is None:
-            return ToolResult(
-                "I had a short roam around, but my camera isn't available to show what I "
-                "found (run the sim with DUCK_SIM_CAMERAS=a).",
-                ok=False,
-            )
-        return ToolResult(
+        return _camera_result(
             "I roamed forward a little on my own, pausing to look — here's where I ended up.",
-            image_png=png,
+            "I had a short roam around, but my camera isn't available to show what I "
+            "found (run the sim with DUCK_SIM_CAMERAS=a).",
         )
 
     def _explore_preview(_: dict[str, Any]) -> str:
@@ -193,41 +198,31 @@ def build_core_tools(
 
     def _turn(arguments: dict[str, Any]) -> ToolResult:
         # Rotate roughly in place to face a new direction, then report the new view. Bounded
-        # (|angle| <= 180) and always stops. Positive = left (CCW), negative = right. Like explore,
-        # the yaw intent must be sustained for the walk policy to pivot, so we resend at 10 Hz on a
-        # real body; that same intent-expiry also stops the duck if anything drops.
+        # (|angle| <= 180) and always stops. Positive = left (CCW), negative = right. The yaw
+        # intent is sustained via _sustain_drive so the walk policy actually pivots on a real body.
         raw = arguments.get("degrees", 60)
         try:
             degrees = max(-180.0, min(180.0, float(raw)))
         except (TypeError, ValueError):
             return ToolResult("'degrees' must be a number between -180 and 180", ok=False)
-        vyaw = 1.0 if degrees >= 0 else -1.0
+        if abs(degrees) < 1.0:  # no meaningful turn requested — just report the current view
+            return _camera_result(
+                "I'm already facing that way — here's what's in front of me.",
+                "I didn't need to turn, but my camera isn't available "
+                "(run the sim with DUCK_SIM_CAMERAS=a).",
+            )
+        vyaw = 1.0 if degrees > 0 else -1.0
         duration = max(_TURN_MIN_S, _TURN_START_S + abs(degrees) / _TURN_DEG_PER_S)
-        try:
-            if gesture_pace:  # a real body: sustain the yaw so the policy actually turns
-                deadline = time.monotonic() + duration
-                while time.monotonic() < deadline:
-                    robot.drive(vx=0.0, vy=0.0, vyaw=vyaw)
-                    time.sleep(0.1)
-            else:  # FakeRobot / tests: record one intent, no streaming
-                robot.drive(vx=0.0, vy=0.0, vyaw=vyaw)
-        finally:
-            robot.stop()  # never leave the duck turning
+        _sustain_drive(vx=0.0, vy=0.0, vyaw=vyaw, seconds=duration)
         robot.set_head(head_pitch=-0.1)  # settle, gaze roughly level
         if gesture_pace:
             time.sleep(gesture_pace)
-        png = _capture_camera_png(camera_url)
-        side = "left" if degrees >= 0 else "right"
-        if png is None:
-            return ToolResult(
-                f"I turned about {abs(int(degrees))}° to the {side}, but my camera isn't "
-                "available (run the sim with DUCK_SIM_CAMERAS=a).",
-                ok=False,
-            )
-        return ToolResult(
-            f"I turned about {abs(int(degrees))}° to the {side} — here's what's in "
-            "front of me now.",
-            image_png=png,
+        side = "left" if degrees > 0 else "right"
+        return _camera_result(
+            f"I turned about {abs(int(degrees))}° to the {side} — here's what's "
+            "in front of me now.",
+            f"I turned about {abs(int(degrees))}° to the {side}, but my camera isn't "
+            "available (run the sim with DUCK_SIM_CAMERAS=a).",
         )
 
     def _turn_preview(arguments: dict[str, Any]) -> str:

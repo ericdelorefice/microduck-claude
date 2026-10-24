@@ -51,11 +51,18 @@ class PrintTTS:
         print(f'🦆 "{text}"', file=self._stream)
 
 
+# Cap audio subprocesses so a stuck player (device held, a bad clip) cannot hang the voice loop
+# forever; a spoken reply finishes well within this in practice.
+_AUDIO_TIMEOUT_S = 120.0
+
 Runner = Callable[[Sequence[str]], object]
 
 
 def _default_runner(cmd: Sequence[str]) -> object:
-    return subprocess.run(list(cmd), check=False)
+    try:
+        return subprocess.run(list(cmd), check=False, timeout=_AUDIO_TIMEOUT_S)
+    except subprocess.TimeoutExpired:
+        return None  # a stuck 'say' must not hang the voice loop
 
 
 class MacSayTTS:
@@ -146,7 +153,9 @@ def _afplay(audio: bytes) -> None:
         handle.write(audio)
         path = handle.name
     try:
-        subprocess.run(["afplay", path], check=False)
+        subprocess.run(["afplay", path], check=False, timeout=_AUDIO_TIMEOUT_S)
+    except subprocess.TimeoutExpired:
+        pass  # a stuck player must not hang the voice loop
     finally:
         if os.path.exists(path):
             os.unlink(path)

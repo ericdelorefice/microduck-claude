@@ -185,3 +185,30 @@ def test_turn_is_a_gated_action() -> None:
     tool = build_registry(FakeRobot(), camera_url="http://cam/frame").get("turn")
     assert tool is not None
     assert tool.risk is Risk.ACTION
+
+
+def test_turn_zero_degrees_does_not_move(monkeypatch: pytest.MonkeyPatch) -> None:
+    monkeypatch.setattr(tools_core, "_capture_camera_png", lambda url, **kw: _PNG + b"still")
+    robot = FakeRobot()
+    tool = build_registry(robot, camera_url="http://cam/frame").get("turn")
+    assert tool is not None
+    result = tool.run({"degrees": 0})
+    assert result.ok
+    assert not any(c.method == "drive" for c in robot.calls)  # a 0 degree turn does not rotate
+
+
+def test_turn_streams_the_yaw_on_a_live_body(monkeypatch: pytest.MonkeyPatch) -> None:
+    # Regression: streaming keys off stream_velocity, NOT gesture_pace — so a live body with
+    # gesture_pace=0 still streams the intent (otherwise the duck would silently never pivot).
+    monkeypatch.setattr(tools_core, "_capture_camera_png", lambda url, **kw: _PNG + b"t")
+    ticks = iter(float(i) for i in range(100000))
+    monkeypatch.setattr(tools_core.time, "monotonic", lambda: next(ticks))
+    monkeypatch.setattr(tools_core.time, "sleep", lambda _s: None)  # don't actually wait
+    robot = FakeRobot()
+    tool = build_registry(
+        robot, camera_url="http://cam/frame", stream_velocity=True, gesture_pace=0.0
+    ).get("turn")
+    assert tool is not None
+    tool.run({"degrees": 60})
+    drives = [c for c in robot.calls if c.method == "drive"]
+    assert len(drives) > 1  # it streamed the yaw intent, not a single notify

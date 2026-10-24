@@ -133,15 +133,25 @@ def _run(*, voice: bool, explore: bool = False) -> int:
     # Hold each gesture step briefly on a real body (the sim) so motion is visible;
     # the in-process FakeRobot stays instant.
     gesture_pace = 0.35 if config.robot_backend == "rpc" else 0.0
+    # On a live body (rpc) the walk policy needs drive intents streamed at 10 Hz to engage; the
+    # in-process FakeRobot does not. This is about the transport, not pacing, so it is its own flag.
+    stream_velocity = config.robot_backend == "rpc"
     # Explore roams autonomously, so it gets a restricted allow-list (perception + locomotion);
     # chat/voice get the full tool set, including memory.
     if explore:
         registry = build_roam_registry(
-            robot, gesture_pace=gesture_pace, camera_url=config.camera_url
+            robot,
+            gesture_pace=gesture_pace,
+            camera_url=config.camera_url,
+            stream_velocity=stream_velocity,
         )
     else:
         registry = build_registry(
-            robot, memory=memory, gesture_pace=gesture_pace, camera_url=config.camera_url
+            robot,
+            memory=memory,
+            gesture_pace=gesture_pace,
+            camera_url=config.camera_url,
+            stream_velocity=stream_velocity,
         )
     system = system_prompt_for(config.persona)
     try:
@@ -299,7 +309,7 @@ def _build_voice_tts(config: Config) -> tuple[TextToSpeech, str, str]:
         )
     if config.voice_output == "duck" and config.duck_ssh_host:
         target = SshTarget(config.duck_ssh_host, config.duck_audio_device, config.duck_ssh_user)
-        tts = SshDuckTTS(MacSayWavRenderer(), SshDuckAudio(target))
+        tts = SshDuckTTS(MacSayWavRenderer(rate=config.say_rate), SshDuckAudio(target))
         return tts, f"duck@{config.duck_ssh_host}", ""
     if MacSayTTS.available():
         voice = config.say_voice or pick_say_voice() or ""

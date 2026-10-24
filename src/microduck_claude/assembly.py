@@ -19,11 +19,14 @@ def build_registry(
     include_installed_plugins: bool = False,
     gesture_pace: float = 0.0,
     camera_url: str = "",
+    stream_velocity: bool = False,
 ) -> ToolRegistry:
     """Assemble the allow-list: core tools, optional memory tools, and any supplied
     or installed providers. Everything beyond the core tools is opt-in."""
     registry = ToolRegistry()
-    for tool in build_core_tools(robot, gesture_pace=gesture_pace, camera_url=camera_url):
+    for tool in build_core_tools(
+        robot, gesture_pace=gesture_pace, camera_url=camera_url, stream_velocity=stream_velocity
+    ):
         registry.register(tool)
     if memory is not None:
         for tool in build_memory_tools(memory):
@@ -49,7 +52,11 @@ _ROAM_TOOLS = frozenset(
 
 
 def build_roam_registry(
-    robot: RobotInterface, *, gesture_pace: float = 0.0, camera_url: str = ""
+    robot: RobotInterface,
+    *,
+    gesture_pace: float = 0.0,
+    camera_url: str = "",
+    stream_velocity: bool = False,
 ) -> ToolRegistry:
     """A restricted allow-list for autonomous `explore` mode (perception + locomotion only).
 
@@ -58,7 +65,9 @@ def build_roam_registry(
     ask), we simply don't register the write/trick tools — the allow-list keeps them out.
     """
     registry = ToolRegistry()
-    for tool in build_core_tools(robot, gesture_pace=gesture_pace, camera_url=camera_url):
+    for tool in build_core_tools(
+        robot, gesture_pace=gesture_pace, camera_url=camera_url, stream_velocity=stream_velocity
+    ):
         if tool.name in _ROAM_TOOLS:
             registry.register(tool)
     return registry
