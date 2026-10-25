@@ -28,13 +28,13 @@ def test_print_tts_writes_quacky_line(capsys) -> None:
 def test_mac_say_builds_command() -> None:
     calls: list[list[str]] = []
     MacSayTTS(runner=lambda cmd: calls.append(list(cmd))).speak("hello")
-    assert calls == [["say", "hello"]]
+    assert calls == [["say", "--", "hello"]]
 
 
 def test_mac_say_with_voice_flag() -> None:
     calls: list[list[str]] = []
     MacSayTTS(voice="Daniel", runner=lambda cmd: calls.append(list(cmd))).speak("hi")
-    assert calls == [["say", "-v", "Daniel", "hi"]]
+    assert calls == [["say", "-v", "Daniel", "--", "hi"]]
 
 
 def test_mac_say_available_is_bool() -> None:
@@ -81,3 +81,11 @@ def test_elevenlabs_survives_a_truncated_response(capsys) -> None:
     err = capsys.readouterr().err
     assert "ElevenLabs TTS failed" in err
     assert "super-secret" not in err
+
+
+def test_mac_say_never_reads_a_reply_as_an_option() -> None:
+    # `say` parses a leading "-" as an option: "- First, a nod." fails as an invalid option
+    # and "-o<path>" writes the audio to that file instead of speaking it.
+    calls: list[list[str]] = []
+    MacSayTTS(runner=lambda cmd: calls.append(list(cmd))).speak("-o/tmp/clobbered.aiff")
+    assert calls == [["say", "--", "-o/tmp/clobbered.aiff"]]

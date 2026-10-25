@@ -80,7 +80,7 @@ class InterruptibleSayTTS:
             cmd += ["-v", self._voice]
         if self._rate:
             cmd += ["-r", str(self._rate)]
-        cmd.append(text)
+        cmd += ["--", text]  # a reply starting with "-" is speech, not a `say` option
         proc = subprocess.Popen(cmd)
         try:
             while proc.poll() is None:

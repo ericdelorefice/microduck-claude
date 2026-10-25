@@ -3,11 +3,12 @@ from __future__ import annotations
 import json
 import threading
 import time
+import urllib.error
 import urllib.request
 
 from microduck_claude.playground import DuckState, PlaygroundApp, WebConfirmer, build_server
 from microduck_claude.robot import FakeRobot, RobotCall
-from tests.fakes import FakeLLM, llm_text
+from tests.fakes import FakeLLM, llm_text, llm_tool
 
 # -- DuckState reducer --------------------------------------------------------
 
@@ -147,3 +148,44 @@ def _post(url: str, body: dict) -> bytes:
         method="POST",
     )
     return urllib.request.urlopen(req, timeout=5).read()
+
+
+def test_another_site_cannot_answer_a_confirmation() -> None:
+    # A page on another origin can send a text/plain POST with no CORS preflight and guess the
+    # small sequential id, so without the check it could Allow an action the user never saw.
+    app = PlaygroundApp(
+        llm=FakeLLM([llm_tool("t1", "perform_gesture", {"gesture": "dance"}), llm_text("ok")]),
+        confirm_timeout=1.0,
+    )
+    server = build_server(app, port=0)
+    port = server.server_address[1]
+    thread = threading.Thread(target=server.serve_forever, daemon=True)
+    thread.start()
+    base = f"http://127.0.0.1:{port}"
+    said = threading.Thread(target=_post, args=(base + "/say", {"text": "dance"}), daemon=True)
+    try:
+        said.start()
+        deadline = time.monotonic() + 2.0
+        while app.confirmer.snapshot() is None and time.monotonic() < deadline:
+            time.sleep(0.01)
+        assert app.confirmer.snapshot() is not None
+        allow = json.dumps({"id": 1, "allow": True}).encode()
+        forged = (
+            {"Content-Type": "text/plain;charset=UTF-8", "Origin": "http://evil.example"},
+            {"Content-Type": "application/json", "Origin": "http://evil.example"},
+            {"Content-Type": "application/json", "Host": f"evil.example:{port}"},
+        )
+        for headers in forged:
+            req = urllib.request.Request(base + "/confirm", data=allow, headers=headers)
+            try:
+                urllib.request.urlopen(req, timeout=5)
+            except urllib.error.HTTPError as exc:
+                assert exc.code == 403
+            else:
+                raise AssertionError(f"forged confirm accepted: {headers}")
+        said.join(3.0)
+        assert not any(c.method == "set_pose" for c in app.robot.calls)  # never danced
+    finally:
+        server.shutdown()
+        server.server_close()
+        thread.join(2.0)

@@ -1,9 +1,10 @@
 """The playground's local HTTP server and the app that wires it together.
 
-Binds localhost only. Uses a threading server so an in-browser confirmation can be
-answered while the ``/say`` request that is waiting on it is still open. Safety is
-preserved: actions go through the normal Dispatcher, and the :class:`WebConfirmer`
-is answered only by the browser's explicit Allow/Deny — model or tool text can't.
+Binds localhost only, and accepts POSTs only from its own page. Uses a threading server
+so an in-browser confirmation can be answered while the ``/say`` request that is waiting
+on it is still open. Safety is preserved: actions go through the normal Dispatcher, and
+the :class:`WebConfirmer` is answered only by the browser's explicit Allow/Deny — model or
+tool text can't.
 """
 
 from __future__ import annotations
@@ -153,6 +154,9 @@ class _Handler(BaseHTTPRequestHandler):
             self.send_error(404)
 
     def do_POST(self) -> None:
+        if not self._from_this_page():
+            self.send_error(403, "POSTs are accepted only from the playground page")
+            return
         body = self._read_json()
         if self.path == "/say":
             text = str(body.get("text", "")).strip()
@@ -164,6 +168,24 @@ class _Handler(BaseHTTPRequestHandler):
             self._json({"ok": ok})
         else:
             self.send_error(404)
+
+    def _from_this_page(self) -> bool:
+        """Whether a POST came from the playground page itself, not another site.
+
+        Another page in the browser can send a form-style (``text/plain``) POST here with no
+        CORS preflight, and could answer a pending confirmation. The page always sends JSON,
+        which a browser sends cross-origin only after a preflight this server never answers;
+        a foreign ``Origin`` is refused, and the ``Host`` check stops DNS rebinding.
+        """
+        port = self.server.server_port  # type: ignore[attr-defined]
+        host = self.headers.get("Host", "")
+        if host not in (f"127.0.0.1:{port}", f"localhost:{port}"):
+            return False
+        origin = self.headers.get("Origin")
+        if origin is not None and origin != f"http://{host}":
+            return False
+        content_type = self.headers.get("Content-Type", "")
+        return content_type.split(";", 1)[0].strip().lower() == "application/json"
 
     def _read_json(self) -> dict[str, Any]:
         length = _int(self.headers.get("Content-Length"))
