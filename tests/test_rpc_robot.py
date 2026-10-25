@@ -172,6 +172,26 @@ def test_drive_for_streams_the_twist_then_stops(monkeypatch: pytest.MonkeyPatch)
     assert any(r[0] == p.ROBOT_STOP for r in transport.requests)  # and stopped at the end
 
 
+def test_drive_for_stops_even_when_interrupted(monkeypatch: pytest.MonkeyPatch) -> None:
+    # A Ctrl-C (or a transport error) mid-drive must still send robot.stop, not leave the
+    # last twist for robotd's deadman to expire.
+    ticks = iter(i * 0.1 for i in range(100000))
+    monkeypatch.setattr(rpc.time, "monotonic", lambda: next(ticks))
+    calls = {"n": 0}
+
+    def _sleep(_s: float) -> None:
+        calls["n"] += 1
+        if calls["n"] == 3:
+            raise KeyboardInterrupt
+
+    monkeypatch.setattr(rpc.time, "sleep", _sleep)
+    transport = _RecordingTransport()
+    robot = RpcRobot(transport)  # type: ignore[arg-type]
+    with pytest.raises(KeyboardInterrupt):
+        robot.drive_for(0.0, 0.0, 1.0, duration=10.2)  # what turn(180) asks for
+    assert [r[0] for r in transport.requests] == [p.ROBOT_STOP]
+
+
 def _rpc_with_camera(monkeypatch: pytest.MonkeyPatch, response: _FakeHTTPResponse) -> RpcRobot:
     monkeypatch.setattr(rpc.urllib.request, "urlopen", lambda url, timeout=0: response)
     return RpcRobot(UnixSocketTransport("/nonexistent.sock"), camera_url="http://cam/frame")
