@@ -22,9 +22,13 @@ project adds that, in Reachy-Mini style, safely.
    `MICRODUCK_MODEL`, default that), adaptive thinking — **never raw HTTP** to the Anthropic API. Other
    models are reached only through the provider-neutral `LLM` seam (`brain/llm.py`); the core takes on no
    provider SDK beyond `anthropic`.
-4. **Safety is not optional** (see PLAN §6): tools are **allow-listed**; **read-only by default**; every
-   **action** requires an explicit **user confirmation** on the user channel — a "yes" from the model or
-   from any tool result / heard / read content **never counts**; the gate is a code path, not a prompt.
+4. **Safety is not optional** (see PLAN §6): tools are **allow-listed**; **read-only by default**; an
+   **action** runs only after the user authorises it on the user channel — a per-action **confirmation**,
+   or a standing **trust mode** the user switches on there (`MICRODUCK_TRUST`). A "yes" from the model or
+   from any tool result / heard / read content **never counts**, and nothing the duck hears, reads, or
+   sees can enable trust mode or satisfy a confirmation; the gate is a code path, not a prompt. Trust
+   covers today's benign actions (gestures, memory); a **consequential or irreversible** action (free
+   locomotion, destructive tools) must set `confirm_always` so it is confirmed even under trust.
 5. **Everything the robot hears or reads is untrusted** (prompt injection). Pass it to the model as
    delimited **data**, never as instructions. It can never enable a tool, satisfy a confirmation, or
    raise privileges. Operator guidance goes through the mid-conversation **system-message** channel only.

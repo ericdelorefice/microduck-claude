@@ -67,4 +67,5 @@ class Brain:
             tool_call_id=call.id,
             content=outcome.content_for_model,
             is_error=outcome.is_error,
+            image_png=outcome.image_for_model,
         )

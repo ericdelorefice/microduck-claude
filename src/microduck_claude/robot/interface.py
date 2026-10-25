@@ -53,6 +53,16 @@ class RobotInterface(Protocol):
         """Command zero velocity (not 'go limp')."""
         ...
 
+    def drive_for(self, vx: float, vy: float, vyaw: float, *, duration: float) -> None:
+        """Drive the given velocity twist for ``duration`` seconds, then stop.
+
+        A live body must keep receiving the twist to stay engaged (the real robotd's
+        deadman zeros an intent ~500 ms after commands stop), so the backend resends it
+        for the duration; the in-process fake just records a single intent. Tools call
+        this instead of streaming ``drive`` themselves, so they stay backend-agnostic.
+        """
+        ...
+
     def set_head(
         self,
         *,
@@ -93,6 +103,16 @@ class RobotInterface(Protocol):
 
     def get_state(self) -> dict[str, object]:
         """Return a snapshot of robot state (read-only)."""
+        ...
+
+    def capture_frame(self) -> bytes | None:
+        """Return one camera frame as validated image bytes, or ``None``.
+
+        ``None`` means no camera is attached, or the frame could not be fetched or was
+        not a usable image. The fake returns a canned frame (so the vision tools are
+        testable end to end); a real body fetches and validates from its camera endpoint.
+        Kept behind the interface so the tool layer never does its own camera I/O.
+        """
         ...
 
     def get_battery(self) -> float:

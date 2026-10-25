@@ -21,11 +21,17 @@ GestureFn = Callable[[RobotInterface], None]
 
 @dataclass(frozen=True)
 class Gesture:
-    """A named expression and the routine that performs it."""
+    """A named expression: either a primitive ``run`` routine or a sim ``skill``.
+
+    A ``skill`` gesture is a trained behaviour invoked via ``robot.do``; it only
+    happens if the robot accepts it (otherwise the duck admits it couldn't).
+    """
 
     name: str
     description: str
-    run: GestureFn
+    run: GestureFn | None = None
+    skill: str | None = None
+    consequential: bool = False  # a dynamic whole-body trick: confirm even under trust
 
 
 def _nod(robot: RobotInterface) -> None:
@@ -101,10 +107,6 @@ def _dance(robot: RobotInterface) -> None:
     robot.play_sound("wheee")
 
 
-def _sit(robot: RobotInterface) -> None:
-    robot.do_behavior("sit_toggle")
-
-
 def _sad(robot: RobotInterface) -> None:
     robot.set_head(head_pitch=0.4)  # droop
     robot.set_pose(z=-0.02)
@@ -173,7 +175,25 @@ _ALL: tuple[Gesture, ...] = (
     Gesture("thinking", "Tilt and give an inquisitive chirp while considering.", _thinking),
     Gesture("confused", "Tilt and glance about with a puzzled chirp.", _confused),
     Gesture("dance", "A short celebratory wiggle with a sound.", _dance),
-    Gesture("sit", "Toggle between sitting and standing.", _sit),
+    Gesture("sit", "Sit down or stand up (needs a robot that supports it).", skill="sit_toggle"),
+    Gesture(
+        "roulade",
+        "A forward roll / somersault — a real trained trick.",
+        skill="roulade",
+        consequential=True,
+    ),
+    Gesture(
+        "kick_left",
+        "A left-footed kick — a real trained trick.",
+        skill="kick_left",
+        consequential=True,
+    ),
+    Gesture(
+        "kick_right",
+        "A right-footed kick — a real trained trick.",
+        skill="kick_right",
+        consequential=True,
+    ),
     Gesture("sad", "Droop the head and sink a little, with a soft sound.", _sad),
     Gesture("angry", "Lean in and shake, with an alarmed sound.", _angry),
     Gesture("surprised", "Jerk the head up and rise, with a surprised chirp.", _surprised),

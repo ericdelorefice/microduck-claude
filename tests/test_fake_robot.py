@@ -42,3 +42,16 @@ def test_state_and_battery() -> None:
     state = robot.get_state()
     assert {"battery", "head", "pose", "behaviors"} <= set(state)
     assert 0.0 <= robot.get_battery() <= 1.0
+
+
+def test_drive_for_records_a_single_intent_then_stops() -> None:
+    # In-process: no deadman to beat, so one drive + stop (the duration is a live-body concern).
+    robot = FakeRobot()
+    robot.drive_for(0.4, 0.0, 0.0, duration=2.5)
+    assert [c.method for c in robot.calls] == ["drive", "stop"]
+    assert robot.calls[0].kwargs == {"vx": 0.4, "vy": 0.0, "vyaw": 0.0}
+
+
+def test_capture_frame_returns_the_configured_frame() -> None:
+    assert FakeRobot().capture_frame() is None  # no camera by default
+    assert FakeRobot(camera_frame=b"PNGBYTES").capture_frame() == b"PNGBYTES"

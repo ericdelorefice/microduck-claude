@@ -24,9 +24,15 @@ class RobotCall:
 class FakeRobot:
     """An in-process stand-in for a Microduck that records what it was told to do."""
 
-    def __init__(self, on_call: Callable[[RobotCall], None] | None = None) -> None:
+    def __init__(
+        self,
+        on_call: Callable[[RobotCall], None] | None = None,
+        *,
+        camera_frame: bytes | None = None,
+    ) -> None:
         self.calls: list[RobotCall] = []
         self._on_call = on_call  # optional live observer (used by the playground)
+        self.camera_frame = camera_frame  # what capture_frame() returns (None = no camera)
         self._battery = 0.87
         self._behaviors: list[str] = list(STOCK_BEHAVIORS)
         self._head: dict[str, float] = {
@@ -59,6 +65,12 @@ class FakeRobot:
     def stop(self) -> None:
         self._driving = False
         self._record("stop")
+
+    def drive_for(self, vx: float, vy: float, vyaw: float, *, duration: float) -> None:
+        # In-process: no deadman to beat, so record a single intent and stop (the `duration`
+        # is a real-body streaming concern). Tests see the same drive + stop as a live body.
+        self.drive(vx, vy, vyaw)
+        self.stop()
 
     def set_head(
         self,
@@ -111,6 +123,9 @@ class FakeRobot:
 
     def list_behaviors(self) -> list[str]:
         return list(self._behaviors)
+
+    def capture_frame(self) -> bytes | None:
+        return self.camera_frame
 
     def get_state(self) -> dict[str, object]:
         return {

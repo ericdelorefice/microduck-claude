@@ -21,25 +21,37 @@ class Risk(enum.Enum):
 
 @dataclass
 class ToolResult:
-    """What a tool returns. ``content`` is text handed back to the model as data."""
+    """What a tool returns.
+
+    ``content`` is text handed back to the model as data. ``image_png`` is an optional
+    image (e.g. a camera frame) for a vision-capable model — text-only providers ignore it.
+    """
 
     content: str
     ok: bool = True
+    image_png: bytes | None = None
 
 
 class Tool(Protocol):
-    """Structural contract every tool satisfies."""
+    """Structural contract every tool satisfies.
+
+    ``confirm_always`` is part of the contract so a consequential tool (and any
+    plugin-supplied tool) can declare that it must be confirmed even under trust
+    mode; the dispatcher honours it. A tool that does not set it defaults to False.
+    """
 
     name: str
     description: str
     risk: Risk
     input_schema: dict[str, Any]
+    confirm_always: bool
 
     def run(self, arguments: dict[str, Any]) -> ToolResult: ...
 
 
 ToolFn = Callable[[dict[str, Any]], ToolResult]
 PreviewFn = Callable[[dict[str, Any]], str]
+ConfirmWhenFn = Callable[[dict[str, Any]], bool]
 
 
 @dataclass
@@ -52,6 +64,12 @@ class FunctionTool:
     input_schema: dict[str, Any]
     func: ToolFn
     preview: PreviewFn | None = None
+    confirm_always: bool = False  # a consequential action: confirm even under trust mode
+    # An optional per-call predicate: when it returns True for the given arguments, this
+    # call is treated as confirm_always (confirmed even under trust). It lets one tool gate
+    # only its consequential inputs (e.g. perform_gesture confirming an acrobatic trick but
+    # not a nod) without splitting into two tools. A missing/failed predicate is fail-safe.
+    confirm_when: ConfirmWhenFn | None = None
 
     def run(self, arguments: dict[str, Any]) -> ToolResult:
         return self.func(arguments)

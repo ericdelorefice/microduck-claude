@@ -93,9 +93,11 @@ class MacSayWavRenderer:
         self,
         voice: str | None = None,
         *,
+        rate: int = 0,
         runner: Callable[[Sequence[str]], None] | None = None,
     ) -> None:
         self._voice = voice
+        self._rate = rate  # macOS 'say' words-per-minute (0 = system default)
         self._runner = runner if runner is not None else _run_quiet
 
     def render(self, text: str) -> bytes:
@@ -104,6 +106,8 @@ class MacSayWavRenderer:
             cmd = ["say", "-o", str(out), "--data-format=LEI16@22050"]
             if self._voice:
                 cmd += ["-v", self._voice]
+            if self._rate:
+                cmd += ["-r", str(self._rate)]
             cmd.append(text)
             self._runner(cmd)
             try:

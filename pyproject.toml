@@ -61,6 +61,8 @@ select = ["E", "F", "I", "UP", "B", "W", "C4"]
 [tool.ruff.lint.per-file-ignores]
 # The playground page is one large embedded HTML/CSS/JS string literal.
 "src/microduck_claude/playground/page.py" = ["E501"]
+# The scene builder is one large embedded MuJoCo-XML string literal.
+"scripts/gallery/build_scene.py" = ["E501"]
 
 [tool.mypy]
 python_version = "3.10"

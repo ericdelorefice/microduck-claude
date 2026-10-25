@@ -8,6 +8,8 @@ the user can interrupt the duck mid-reply.
 
 from __future__ import annotations
 
+import threading
+
 from ..brain import Brain
 from .bargein import Barger
 from .interfaces import SpeechToText, TextToSpeech
@@ -60,8 +62,21 @@ class VoiceLoop:
             self._reactor.on_idle()
 
     def _speak(self, text: str) -> bool:
-        """Speak ``text``; return True if the user barged in (where supported)."""
-        if self._barge_in is not None:
-            return self._barge_in.speak(text)
-        self._tts.speak(text)
-        return False
+        """Speak ``text`` while the duck animates; return True if the user barged in.
+
+        The reactor's head bob / beak flap runs on a background thread so it plays
+        *during* the (blocking) audio, then is stopped before this returns.
+        """
+        stop = threading.Event()
+        animation = threading.Thread(
+            target=self._reactor.animate, args=(stop,), name="speech-animate", daemon=True
+        )
+        animation.start()
+        try:
+            if self._barge_in is not None:
+                return self._barge_in.speak(text)
+            self._tts.speak(text)
+            return False
+        finally:
+            stop.set()
+            animation.join(timeout=1.0)

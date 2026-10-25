@@ -16,7 +16,12 @@ from typing import Any
 
 from ..assembly import build_registry
 from ..brain import LLM, SYSTEM_PROMPT, Brain
-from ..expressions import UnknownGestureError, gesture_names, perform_gesture
+from ..expressions import (
+    GestureUnavailableError,
+    UnknownGestureError,
+    gesture_names,
+    perform_gesture,
+)
 from ..robot import FakeRobot, RobotCall
 from ..safety import Dispatcher
 from .page import PAGE_HTML
@@ -111,6 +116,8 @@ class PlaygroundApp:
             gesture = perform_gesture(self.robot, name)
         except UnknownGestureError:
             return {"ok": False, "error": f"unknown gesture {name!r}"}
+        except GestureUnavailableError:
+            return {"ok": False, "error": f"the duck can't do {name!r} on this body"}
         return {"ok": True, "gesture": gesture.name}
 
     def gesture_names(self) -> list[str]:
