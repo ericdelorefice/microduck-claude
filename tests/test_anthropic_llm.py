@@ -117,3 +117,37 @@ def test_unanswered_tool_use_is_closed_on_next_user_turn() -> None:
     assert tool_result["tool_use_id"] == "t1"
     assert tool_result["is_error"] is True
     assert text_block == {"type": "text", "text": "next"}
+
+
+def test_a_tool_that_ran_is_not_reported_as_not_run_after_a_failed_request() -> None:
+    # The tool ran (the duck turned, a note was saved), then the request carrying its result
+    # failed. The next turn must give the model that result, not "the tool-call limit was
+    # reached", which would have it believe nothing happened and try again.
+    class _OkThenBoomThenOk:
+        def __init__(self) -> None:
+            self.calls = 0
+            self.last_messages: list[Any] = []
+
+        def create(self, **kwargs: Any) -> Any:
+            self.calls += 1
+            self.last_messages = list(kwargs["messages"])
+            if self.calls == 1:
+                return tool_response("t1", "see", {})
+            if self.calls == 2:
+                raise RuntimeError("API 529: overloaded")
+            return text_response("recovered")
+
+    client: Any = type("Client", (), {})()
+    client.messages = _OkThenBoomThenOk()
+    llm = AnthropicLLM(client, model="m", max_tokens=10)
+    llm.start("S", [])
+    llm.send_user("what do you see?")
+    with pytest.raises(RuntimeError):
+        llm.send_tool_results([ToolResult("t1", "a red door", image_png=b"\x89PNG\r\n\x1a\nx")])
+    assert llm.send_user("well?").texts == ["recovered"]
+    result, text = client.messages.last_messages[-1]["content"]
+    assert result["tool_use_id"] == "t1"
+    assert result["is_error"] is False
+    assert {"type": "text", "text": "a red door"} in result["content"]
+    assert not any(part.get("type") == "image" for part in result["content"])  # text only
+    assert text == {"type": "text", "text": "well?"}

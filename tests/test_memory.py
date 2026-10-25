@@ -68,3 +68,18 @@ def test_forget_is_confirmed_even_under_trust(tmp_path: Path) -> None:
     result = trusting_but_declining.dispatch("forget", {"about": "tea"})
     assert result.outcome is Outcome.DECLINED_BY_USER  # trust did not skip the prompt
     assert store.all() == ["the user likes tea"]  # nothing was deleted
+
+
+def test_a_corrupt_memory_file_is_kept_not_overwritten(tmp_path: Path) -> None:
+    # A truncated file used to read as [] and be overwritten by the next "remember",
+    # silently losing every earlier note. It is now moved aside before the write.
+    path = tmp_path / "memory.json"
+    original = '{"memories": ["likes Monet", "birthday in May",'  # cut off mid-write
+    path.write_text(original, encoding="utf-8")
+    store = MemoryStore(path)
+    assert store.all() == []  # reads stay tolerant
+    store.add("new note")
+    assert store.all() == ["new note"]
+    aside = list(tmp_path.glob("memory.json.corrupt-*"))
+    assert len(aside) == 1
+    assert aside[0].read_text(encoding="utf-8") == original
