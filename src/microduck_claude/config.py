@@ -1,8 +1,8 @@
 """Runtime configuration, read from the environment.
 
-The Anthropic API key is deliberately NOT represented here. The SDK reads
-``ANTHROPIC_API_KEY`` from the environment itself; this project never stores, logs,
-or asks for it (see CLAUDE.md guardrail #2).
+Anthropic credentials are deliberately NOT represented here. The SDK resolves them
+itself — an ``ANTHROPIC_API_KEY`` or an ``ant auth login`` profile — and this project
+never stores, logs, or asks for them (see CLAUDE.md guardrail #2).
 """
 
 from __future__ import annotations

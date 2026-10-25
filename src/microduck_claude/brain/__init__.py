@@ -3,7 +3,7 @@
 from __future__ import annotations
 
 from .anthropic_llm import AnthropicLLM
-from .client import MissingAPIKeyError, build_client
+from .client import MissingCredentialsError, build_client
 from .factory import build_llm
 from .llm import LLM, LLMResponse, ToolCall, ToolResult
 from .loop import Brain, Turn
@@ -19,7 +19,7 @@ __all__ = [
     "AnthropicLLM",
     "Brain",
     "LLMResponse",
-    "MissingAPIKeyError",
+    "MissingCredentialsError",
     "OpenAICompatError",
     "OpenAICompatLLM",
     "Persona",

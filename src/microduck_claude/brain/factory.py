@@ -12,8 +12,9 @@ from .openai_llm import OpenAICompatLLM
 
 
 def build_llm(config: Config) -> LLM:
-    """Build the configured LLM. ``anthropic`` (default) uses the Claude SDK and
-    requires ``ANTHROPIC_API_KEY``; ``openai`` targets an OpenAI-compatible server."""
+    """Build the configured LLM. ``anthropic`` (default) uses the Claude SDK with
+    whatever credentials it resolves (an API key or an ``ant auth login`` profile);
+    ``openai`` targets an OpenAI-compatible server."""
     if config.llm_provider == "anthropic":
         return AnthropicLLM(build_client(), model=config.model, max_tokens=config.max_tokens)
     if config.llm_provider == "openai":
