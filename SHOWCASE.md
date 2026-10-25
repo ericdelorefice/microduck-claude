@@ -114,6 +114,33 @@ safety-architecture deep dive (very saveable for engineers).
 >
 > #Robotics #OpenSource #LLM #EmbodiedAI #HuggingFace
 
+## Pre-publish accuracy checklist
+
+Robotics people scrutinize these demos, so confirm every claim is true before posting. The items
+marked done were verified 2026-10-24; the rest can only be confirmed in the live run.
+
+Live run (before you cut the video):
+- [ ] Claude identifies each painting **correctly** — watch every call and only use takes where the
+  IDs are right. If it misses one, reshoot or keep it as an honest "got one wrong" beat (that builds
+  trust); never publish a confident wrong ID.
+- [ ] The wording matches what it actually does: at 360×640 it may **recognize the artwork** rather
+  than literally **read the placard**'s fine print. Claim whichever is true.
+- [ ] Nothing hallucinated in the narration — the dates/artists it states match the placards.
+
+Ground truth (verified):
+- [x] Placard facts are historically correct: Mona Lisa (Leonardo, c.1503), The Starry Night (van
+  Gogh, 1889), The Great Wave (Hokusai, c.1831), Salvator Mundi (Leonardo, c.1500), Scotland
+  Forever! (Lady Butler, 1881), Charge of the Light Brigade (R. Caton Woodville, 1894).
+- [x] Repo is public and Apache-2.0 — the "open-source" claim holds and the first-comment link works.
+- [x] Safety claims hold in code — tools allow-listed, read-only by default, consequential actions
+  need explicit authorization, and anything heard/read is untrusted.
+
+Framing (your call, confirm before posting):
+- [ ] Labelled `SIMULATION · MuJoCo` on the video itself, not only in the caption.
+- [ ] Any speed-up carries a visible `2×` tag.
+- [ ] No overclaiming — "LLM-driven decision loop, in simulation," never "thinks / sentient / AGI."
+- [ ] "Physical robot ~3 months out" is still your honest timeline.
+
 ## Pitfalls to avoid
 
 - Overclaiming — never "sentient / thinks / AGI / fully autonomous." Say *LLM-driven decision loop, in

@@ -7,7 +7,8 @@ from microduck_claude.cli import _run_explore
 from microduck_claude.config import Config
 from microduck_claude.robot import FakeRobot
 from microduck_claude.tools import ToolRegistry
-from tests.fakes import FakeLLM, llm_text
+from microduck_claude.voice import PrintTTS
+from tests.fakes import FakeLLM, FakeTTS, llm_text
 
 
 def test_explore_refuses_rpc_without_opt_in() -> None:
@@ -26,7 +27,7 @@ def test_explore_runs_on_the_fake_backend() -> None:
     config = Config(robot_backend="fake")
     llm = FakeLLM([llm_text("I look around the gallery.")] * 15)
     registry = build_roam_registry(robot)
-    rc = _run_explore(llm, robot, registry, "sys", config)
+    rc = _run_explore(llm, robot, registry, "sys", config, tts=PrintTTS())  # silent: no `say`
     assert rc == 0
     assert any(c.method == "stop" for c in robot.calls)  # stopped when the roam ended
 
@@ -36,5 +37,17 @@ def test_explore_allows_rpc_with_opt_in() -> None:
     robot = FakeRobot()
     config = Config(robot_backend="rpc", explore_allow_rpc=True)
     llm = FakeLLM([llm_text("Looking around.")] * 15)
-    rc = _run_explore(llm, robot, build_roam_registry(robot), "sys", config)
+    rc = _run_explore(llm, robot, build_roam_registry(robot), "sys", config, tts=PrintTTS())
     assert rc == 0
+
+
+def test_explore_narrates_each_line_aloud() -> None:
+    # The demo payoff: the duck speaks every observation through the configured voice.
+    robot = FakeRobot()
+    config = Config(robot_backend="fake")
+    tts = FakeTTS()
+    llm = FakeLLM([llm_text("That is the Mona Lisa.")] + [llm_text("Moving on.")] * 14)
+    rc = _run_explore(llm, robot, build_roam_registry(robot), "sys", config, tts=tts)
+    assert rc == 0
+    assert tts.spoken[0] == "That is the Mona Lisa."
+    assert len(tts.spoken) == 15  # every round's narration was spoken, not just printed
