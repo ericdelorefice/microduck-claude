@@ -85,11 +85,15 @@ class RpcRobot:
     def drive_for(self, vx: float, vy: float, vyaw: float, *, duration: float) -> None:
         # Keep resending the twist so the walk policy stays engaged (robotd expires an intent
         # ~500 ms after notifications stop), then stop. Blocks for roughly `duration`.
+        # The stop is in a finally: a Ctrl-C or a transport error mid-drive must not leave the
+        # last twist standing until robotd's deadman expires it.
         deadline = time.monotonic() + duration
-        while time.monotonic() < deadline:
-            self.drive(vx, vy, vyaw)
-            time.sleep(_KEEPALIVE_INTERVAL_S)
-        self.stop()
+        try:
+            while time.monotonic() < deadline:
+                self.drive(vx, vy, vyaw)
+                time.sleep(_KEEPALIVE_INTERVAL_S)
+        finally:
+            self.stop()
 
     def set_head(
         self,

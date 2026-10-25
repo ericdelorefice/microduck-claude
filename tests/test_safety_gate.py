@@ -145,3 +145,14 @@ def test_acrobatic_gesture_is_confirmed_even_under_trust() -> None:
     assert result.outcome is Outcome.DECLINED_BY_USER
     assert not any(c.method == "do_behavior" for c in robot.calls)  # the trick never ran
     assert confirmer.prompts  # it asked before the trick
+
+
+def test_turn_confirmation_names_the_angle_the_duck_will_turn() -> None:
+    # The duck turns at most 180 degrees, so the prompt must not ask about 720.
+    confirmer = RecordingConfirmer(answer=False)
+    dispatcher = Dispatcher(build_registry(FakeRobot()), confirmer)
+    cases = [(720, "180° to the left"), (-1000, "180° to the right"), (90, "90° to the left")]
+    for degrees, expected in cases:
+        dispatcher.dispatch("turn", {"degrees": degrees})
+        assert expected in confirmer.prompts[-1]
+    assert not any("720" in prompt or "1000" in prompt for prompt in confirmer.prompts)

@@ -10,9 +10,28 @@ _AFFIRMATIVE_WORDS = frozenset(
     {"yes", "yeah", "yep", "yup", "sure", "ok", "okay", "affirmative", "confirm", "confirmed"}
 )
 _AFFIRMATIVE_PHRASES = frozenset({"go ahead", "do it", "please do"})
+# Anything that negates or holds off declines: "I'm not sure", "not now" and "okay, wait"
+# each contain an affirmative word ("sure", "okay") but are not a yes.
 _NEGATIVE_WORDS = frozenset(
-    {"no", "nope", "nah", "cancel", "stop", "negative", "don't", "dont", "never"}
+    {
+        "no",
+        "nope",
+        "nah",
+        "cancel",
+        "stop",
+        "negative",
+        "don't",
+        "dont",
+        "never",
+        "not",
+        "wait",
+        "maybe",
+    }
 )
+
+
+def _negates(word: str) -> bool:
+    return word in _NEGATIVE_WORDS or word.endswith("n't")  # can't, won't, isn't, ...
 
 
 class VoiceConfirmer:
@@ -38,8 +57,9 @@ class VoiceConfirmer:
         utterance = self._stt.listen()
         if utterance is None:
             return False
-        answer = utterance.text.strip().lower().rstrip(".!?")
+        # Fold typographic apostrophes (a transcriber may emit "can’t") so contractions match.
+        answer = utterance.text.strip().lower().rstrip(".!?").replace("\u2019", "'")
         words = set(re.findall(r"[a-z']+", answer))
-        if words & _NEGATIVE_WORDS:
+        if any(_negates(word) for word in words):
             return False  # any negation present -> decline (also defeats the prompt echo)
         return answer in _AFFIRMATIVE_PHRASES or bool(words & _AFFIRMATIVE_WORDS)

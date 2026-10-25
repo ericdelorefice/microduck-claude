@@ -40,6 +40,19 @@ _TURN_DEG_PER_S = 20.0  # effective yaw rate once engaged (at |vyaw|=1.0)
 _TURN_MIN_S = 2.5  # minimum sustained turn, so the gait always engages
 
 
+def _turn_degrees(arguments: dict[str, Any]) -> float | None:
+    """The angle a ``turn`` call will execute: clamped to [-180, 180], or None if not a number.
+
+    Shared by the tool and its confirmation preview, so the user is asked about the turn
+    that will actually happen.
+    """
+    raw = arguments.get("degrees", 60)
+    try:
+        return max(-180.0, min(180.0, float(raw)))
+    except (TypeError, ValueError):
+        return None
+
+
 def build_core_tools(robot: RobotInterface, *, gesture_pace: float = 0.0) -> list[Tool]:
     """Build the core tool set, bound to a particular robot.
 
@@ -136,10 +149,8 @@ def build_core_tools(robot: RobotInterface, *, gesture_pace: float = 0.0) -> lis
         # Rotate roughly in place to face a new direction, then report the new view. Bounded
         # (|angle| <= 180) and always stops. Positive = left (CCW), negative = right. The yaw
         # intent is sustained via _sustain_drive so the walk policy actually pivots on a real body.
-        raw = arguments.get("degrees", 60)
-        try:
-            degrees = max(-180.0, min(180.0, float(raw)))
-        except (TypeError, ValueError):
+        degrees = _turn_degrees(arguments)
+        if degrees is None:
             return ToolResult("'degrees' must be a number between -180 and 180", ok=False)
         if abs(degrees) < 1.0:  # no meaningful turn requested — just report the current view
             return _camera_result(
@@ -162,7 +173,14 @@ def build_core_tools(robot: RobotInterface, *, gesture_pace: float = 0.0) -> lis
         )
 
     def _turn_preview(arguments: dict[str, Any]) -> str:
-        return f"turn to look a different way ({arguments.get('degrees', 60)}°)"
+        # Show the angle the duck will actually turn (clamped), not the raw request.
+        degrees = _turn_degrees(arguments)
+        if degrees is None:
+            return "turn to look a different way"
+        if abs(degrees) < 1.0:
+            return "look at what is in front of me (no turn needed)"
+        side = "left" if degrees > 0 else "right"
+        return f"turn about {abs(int(degrees))}° to the {side} to look a different way"
 
     turn_schema: dict[str, Any] = {
         "type": "object",
