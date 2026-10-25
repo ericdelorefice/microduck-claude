@@ -20,6 +20,7 @@ DEFAULT_MODEL = "claude-opus-5-5"
 # short text placeholder instead.
 _MAX_IMAGES = 3
 _FRAME_OMITTED = "[an earlier camera frame was omitted to keep the request small]"
+_FRAME_NOT_RESENT = "[the camera frame from this call could not be resent]"
 
 
 def _image_media_type(data: bytes) -> str:
@@ -46,19 +47,27 @@ class AnthropicLLM:
         self._system = ""
         self._tools: list[dict[str, Any]] = []
         self._messages: list[dict[str, Any]] = []
+        # Results of tools that RAN but whose request the API rejected (rolled back below), by
+        # tool_use id, so the next turn reports what actually happened instead of "not run".
+        self._undelivered: dict[str, dict[str, Any]] = {}
 
     def start(self, system: str, tools: list[dict[str, Any]]) -> None:
         self._system = system
         self._tools = list(tools)
         self._messages = []
+        self._undelivered = {}
 
     def send_user(self, text: str) -> LLMResponse:
         # Close out any tool_use the model emitted that the brain never answered (e.g. a turn
         # that hit the tool-call limit). The API requires every tool_use to be followed by a
         # tool_result, so inject synthetic ones and carry the new text in the SAME user message.
+        # A tool that did run (its results were in a request the API rejected) gets its real
+        # result back, text only, rather than a "not run" note the model would act on.
         pending = self._pending_tool_use_ids()
         if pending:
-            content: list[dict[str, Any]] = [self._cancel_block(tid) for tid in pending]
+            content: list[dict[str, Any]] = [
+                self._undelivered.get(tid) or self._cancel_block(tid) for tid in pending
+            ]
             if text:
                 content.append({"type": "text", "text": text})
             return self._exchange({"role": "user", "content": content})
@@ -72,10 +81,30 @@ class AnthropicLLM:
         self._messages.append(user_message)
         self._prune_images()
         try:
-            return self._complete()
+            response = self._complete()
         except Exception:
             self._messages.pop()  # a turn the API rejected must not poison later requests
+            self._keep_undelivered(user_message)
             raise
+        self._undelivered = {}
+        return response
+
+    def _keep_undelivered(self, user_message: dict[str, Any]) -> None:
+        """Remember the tool results in a rejected request, minus images (a likely cause)."""
+        content = user_message.get("content")
+        if not isinstance(content, list):
+            return
+        for block in content:
+            if not isinstance(block, dict) or block.get("type") != "tool_result":
+                continue
+            kept = dict(block)
+            inner = block.get("content")
+            if isinstance(inner, list):
+                parts = [p for p in inner if isinstance(p, dict) and p.get("type") == "text"]
+                if len(parts) < len(inner):
+                    parts.append({"type": "text", "text": _FRAME_NOT_RESENT})
+                kept["content"] = parts
+            self._undelivered[str(block.get("tool_use_id"))] = kept
 
     def _pending_tool_use_ids(self) -> list[str]:
         """IDs of tool_use blocks in a trailing assistant turn that were never answered."""
