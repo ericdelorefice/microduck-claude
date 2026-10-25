@@ -194,7 +194,13 @@ def _run_chat(
 
 
 def _run_explore(
-    llm: LLM, robot: RobotInterface, registry: ToolRegistry, system: str, config: Config
+    llm: LLM,
+    robot: RobotInterface,
+    registry: ToolRegistry,
+    system: str,
+    config: Config,
+    *,
+    tts: TextToSpeech | None = None,
 ) -> int:
     """Autonomous gallery exploration: the duck roams and identifies what it sees on its own.
 
@@ -205,6 +211,10 @@ def _run_explore(
     registry cannot invoke a memory write or an acrobatic trick. Autonomous locomotion is only
     sim-safe, so it is refused on the rpc backend unless ``MICRODUCK_EXPLORE_ALLOW_RPC`` confirms
     it points at the simulator (a real body needs the PLAN §6 hardware limits first).
+
+    The duck narrates each observation aloud through the configured voice (set
+    ``MICRODUCK_SAY_VOICE`` / ``MICRODUCK_SAY_RATE``) and prints it too, so the terminal shows
+    the captions. ``tts`` is injectable for tests.
     """
     if config.robot_backend != "fake" and not config.explore_allow_rpc:
         print(
@@ -215,6 +225,11 @@ def _run_explore(
             file=sys.stderr,
         )
         return 1
+    # The duck narrates its tour aloud (the demo payoff). With no audio backend (PrintTTS) it
+    # just prints; the terminal always shows the text so it can be burned in as captions.
+    if tts is None:
+        tts, _, _ = _build_voice_tts(config)
+    narrate = None if isinstance(tts, PrintTTS) else tts.speak
     dispatcher = Dispatcher(registry, _RoamAuthorizer())
     brain = Brain(llm, registry, dispatcher, system=system, max_tool_iterations=8)
     rounds = 15
@@ -225,17 +240,22 @@ def _run_explore(
     )
     seed = (
         "You are alone in a gallery and free to explore it yourself — nobody will tell you what is "
-        "here. Turn to face something on the walls, look at it through your own camera, and work "
-        "out what it is: describe what you see, then give your best guess at the artwork and the "
-        "artist. Then move on to something you have not examined yet, keeping track of what you "
-        "have already found so you build up a sense of the whole room.\n"
+        "here. Turn to face a painting on the walls and look at it through your own camera. Give "
+        "your first best guess at the artwork and artist from where you stand — then WALK RIGHT UP "
+        "TO IT and get close enough to read the small placard beside it, so you can confirm or "
+        "correct that guess. You start in the middle of the room, so the walls are a few steps "
+        "away: use 'explore' to walk toward the piece, and call it again if you are still too far "
+        "to read the placard — don't settle for a distant look. Once you've confirmed it, move on "
+        "to a piece you have not examined yet, keeping track of what you've already found.\n"
         "How to move: turn in decisive steps of about 60-90 degrees — small turns barely register, "
-        "because turning is a walking gait that needs a real pivot. Use 'explore' to walk a few "
-        "steps toward a piece when you want a closer look. Take one step of that now."
+        "because turning is a walking gait that needs a real pivot. 'explore' walks you forward "
+        "a few steps; repeat it to close the distance. Start now: look around, pick a painting, "
+        "and head over to it."
     )
     follow = (
-        "Keep exploring on your own — turn a solid 60-90 degrees toward a wall you have not "
-        "examined yet, look at it, and tell me what you think it is. Say if you've seen it before."
+        "Keep exploring on your own — turn a solid 60-90 degrees toward a piece you have not "
+        "examined yet, then walk right up to it with 'explore' (repeating until you are close "
+        "enough to read its placard) and tell me what it is. Say if you've seen it before."
     )
     message = seed
     try:
@@ -247,6 +267,8 @@ def _run_explore(
                 break
             for text in turn.texts:
                 print(f"duck › {text}")
+                if narrate is not None:
+                    narrate(text)
             message = follow
     except KeyboardInterrupt:
         print("\n(stopped exploring)")
