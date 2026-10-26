@@ -44,11 +44,24 @@ class FakeMessages:
         return self._responses.pop(0)
 
 
+class _FakeBeta:
+    """Mirrors ``client.beta`` so the adapter's ``client.beta.messages.create`` records to the
+    same recorder that ``client.messages`` reads from."""
+
+    def __init__(self, messages: FakeMessages) -> None:
+        self.messages = messages
+
+
 class FakeAnthropic:
-    """A stand-in for ``anthropic.Anthropic`` with a scripted ``messages.create``."""
+    """A stand-in for ``anthropic.Anthropic`` with a scripted ``messages.create``.
+
+    The adapter calls ``client.beta.messages.create``; ``.messages`` and ``.beta.messages``
+    share one recorder, so tests can read the calls from either.
+    """
 
     def __init__(self, responses: list[FakeResponse]) -> None:
         self.messages = FakeMessages(responses)
+        self.beta = _FakeBeta(self.messages)
 
 
 def text_response(text: str, stop_reason: str = "end_turn") -> FakeResponse:
