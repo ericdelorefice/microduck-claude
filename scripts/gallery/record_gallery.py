@@ -9,7 +9,7 @@ that slows the present slows physics, the walk policy falls behind real time, an
 render thread; see docs/the research report.) The sim's own camera feed is the duck's *first-person*
 head camera only, as raw UYVY over a TCP socket — there is no 3rd-person stream to grab.
 
-So we do not capture the screen. We render the 3rd-person shot ourselves, offscreen, in this separate
+We don't capture the screen. We render the 3rd-person shot ourselves, offscreen, in this separate
 process: load the same gallery scene, read the live duck's pose from the running body server
 (`op:"read"` over TCP — trunk position, IMU quaternion, joint angles), drive our own copy of the
 model to that pose, render a free "hero" camera that follows the duck, and pipe frames straight into
@@ -26,9 +26,10 @@ Smoke-test the render + encode path with no sim running (renders the STAND pose)
     python scripts/gallery/record_gallery.py --selftest --out selftest.mp4 --preview frame0.png
 
 Needs mujoco + Pillow (the microduck_rl .venv has them) and ffmpeg built with VideoToolbox. The
-offscreen render reuses build_scene.render()'s approach and does NOT need mjpython — that is only for
-the onscreen viewer. Resolution is capped by the scene's offscreen buffer (offwidth/offheight, 1280x960).
+offscreen render reuses build_scene.render()'s approach and does NOT need mjpython — only for
+the onscreen viewer. Resolution is capped by the scene's offscreen buffer (1280x960).
 """
+
 from __future__ import annotations
 
 import argparse
@@ -39,16 +40,27 @@ import socket
 import subprocess
 import sys
 import time
-from pathlib import Path
 
 # `duck_ipc_proto::JOINT_NAMES` / body_server.JOINT_NAMES — the wire order every positional array is
 # indexed by. 15 names: `mouth` (index 9) is on the wire but not in the walking model, so it maps to
 # no joint here and is skipped. Duplicated (not imported) for the same reason the sim duplicates it:
 # the sim lives in another repo and we only talk to it over the socket.
 JOINT_NAMES = (
-    "left_hip_yaw", "left_hip_roll", "left_hip_pitch", "left_knee", "left_ankle",
-    "neck_pitch", "head_pitch", "head_yaw", "head_roll", "mouth",
-    "right_hip_yaw", "right_hip_roll", "right_hip_pitch", "right_knee", "right_ankle",
+    "left_hip_yaw",
+    "left_hip_roll",
+    "left_hip_pitch",
+    "left_knee",
+    "left_ankle",
+    "neck_pitch",
+    "head_pitch",
+    "head_yaw",
+    "head_roll",
+    "mouth",
+    "right_hip_yaw",
+    "right_hip_roll",
+    "right_hip_pitch",
+    "right_knee",
+    "right_ankle",
 )
 PROTOCOL = 1  # body_server.PROTOCOL; checked in the hello handshake
 
@@ -60,7 +72,7 @@ def _model_index(m):
     """Map the wire pose onto our model's qpos: the free-joint base address + each named hinge's.
 
     By name, never by wire index: the wire carries `mouth`, the walking model does not, so a
-    positional copy would be off by one from index 9 on. Returns (trunk_qpos_adr, {wire_index: adr}).
+    positional copy would be off by one from index 9. Returns (trunk_qpos_adr, {wire_index: adr}).
     """
     import mujoco
 
@@ -93,7 +105,7 @@ class BodyClient:
 
     robotd keeps its own connection and drives the duck; this opens a separate one and only ever
     asks `op:"read"`, so it takes the shared world lock briefly to copy sensors out and never writes
-    ctrl/torque. The server is threaded, so an extra passive reader does not disturb robotd's socket.
+    ctrl/torque. The server is threaded, so an extra passive reader won't disturb robotd's socket.
     """
 
     def __init__(self, host, port, timeout=2.0):
@@ -147,11 +159,30 @@ def _ffmpeg(out, w, h, fps, encoder, bitrate):
     if shutil.which("ffmpeg") is None:
         raise SystemExit("ffmpeg not found on PATH")
     cmd = [
-        "ffmpeg", "-y",
-        "-use_wallclock_as_timestamps", "1",
-        "-f", "rawvideo", "-pixel_format", "rgb24", "-video_size", f"{w}x{h}", "-i", "-",
-        "-r", str(fps), "-fps_mode", "cfr",
-        "-c:v", encoder, "-b:v", bitrate, "-pix_fmt", "yuv420p", "-movflags", "+faststart",
+        "ffmpeg",
+        "-y",
+        "-use_wallclock_as_timestamps",
+        "1",
+        "-f",
+        "rawvideo",
+        "-pixel_format",
+        "rgb24",
+        "-video_size",
+        f"{w}x{h}",
+        "-i",
+        "-",
+        "-r",
+        str(fps),
+        "-fps_mode",
+        "cfr",
+        "-c:v",
+        encoder,
+        "-b:v",
+        bitrate,
+        "-pix_fmt",
+        "yuv420p",
+        "-movflags",
+        "+faststart",
         out,
     ]
     return subprocess.Popen(cmd, stdin=subprocess.PIPE)
@@ -167,7 +198,7 @@ def run(args):
 
     client = None
     if args.selftest:
-        # No sim: hold the STAND keyframe at the origin — the same pose build_scene.render() previews.
+        # No sim: hold the STAND keyframe at the origin (the pose build_scene.render() previews).
         names = [mujoco.mj_id2name(m, mujoco.mjtObj.mjOBJ_KEY, i) for i in range(m.nkey)]
         d.qpos[:] = m.key_qpos[names.index("STAND")]
         mujoco.mj_forward(m, d)
@@ -204,7 +235,9 @@ def run(args):
                 print("ffmpeg exited early; stopping", file=sys.stderr)
                 break
             frames += 1
-            slack = period - (time.perf_counter() - tick)  # cap the loop at target fps (ffmpeg owns timing)
+            slack = period - (
+                time.perf_counter() - tick
+            )  # cap the loop at target fps (ffmpeg owns timing)
             if slack > 0:
                 time.sleep(slack)
     except KeyboardInterrupt:
@@ -218,7 +251,9 @@ def run(args):
             proc.stdin.close()
         proc.wait()
     elapsed = max(time.perf_counter() - start, 1e-6)
-    print(f"wrote {args.out}: {frames} frames in {elapsed:.1f}s ({frames / elapsed:.1f} fps actual)")
+    print(
+        f"wrote {args.out}: {frames} frames in {elapsed:.1f}s ({frames / elapsed:.1f} fps actual)"
+    )
 
 
 def main():
@@ -238,7 +273,9 @@ def main():
     p.add_argument("--encoder", default="h264_videotoolbox")
     p.add_argument("--bitrate", default="12M")
     p.add_argument("--preview", default="", help="also save the first frame as a PNG here")
-    p.add_argument("--selftest", action="store_true", help="no sim: render the STAND pose (smoke test)")
+    p.add_argument(
+        "--selftest", action="store_true", help="no sim: render the STAND pose (smoke test)"
+    )
     args = p.parse_args()
     if args.selftest and args.duration == 0.0:
         args.duration = 2.0  # a short clip is enough to prove the pipe
