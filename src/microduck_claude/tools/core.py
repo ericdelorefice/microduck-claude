@@ -32,13 +32,35 @@ _NO_ARGS_SCHEMA: dict[str, Any] = {
 }
 
 
-# How far from a painting to stop: close enough to read the placard, far enough back that the
-# picture (hung at ~0.9 m) is in view — at ~0.5 m the duck said it was "right under it".
-_VIEWING_DISTANCE_M = 0.9
+# How far from a painting to stop. The camera sees ~31° above its axis (62° tall, upright), plus
+# ~11° of head tilt when looking: to get the top of a gallery frame (~1.45 m) in view from a head
+# at ~0.22 m takes ~1.3 m. At 0.9 m the duck said it was "right under it". Placards still read.
+_VIEWING_DISTANCE_M = 1.3
+# Head pitch (negative = up). Walking it looks ahead, so the distance sensor sees what is in the
+# way; stopped in front of a painting, a level gaze shows only its bottom edge (measured on the sim
+# at 1.3 m: -0.45 clips the top of the frame, -0.7 to -0.95 frame the whole picture).
+_WALK_HEAD_PITCH = -0.2
+_VIEW_HEAD_PITCH = -0.8
 _EXPLORE_LEG_S = 2.5  # two legs of this, looking between them, per explore
 
+# How wide the head camera's picture is, left edge to right edge. The alpha robot's IMX219 sees 62°
+# across its long side and is mounted a quarter turn over, so the upright picture is the short
+# side: 2·atan(tan 31° · 9/16) ≈ 37°. The gallery sim is set to match (scripts/gallery). Without it
+# the model guessed "off to the right" meant ~45° and overshot; at the edge it is only ~19°.
+CAMERA_HFOV_DEG = 37.3
 
-def build_core_tools(robot: RobotInterface, *, gesture_pace: float = 0.0) -> list[Tool]:
+
+def _view_note(hfov_deg: float) -> str:
+    edge, half = hfov_deg / 2, hfov_deg / 4
+    return (
+        f"(My camera sees about {round(hfov_deg)}° from edge to edge: something at the left or "
+        f"right edge is about {round(edge)}° that way, halfway to the edge about {round(half)}°.)"
+    )
+
+
+def build_core_tools(
+    robot: RobotInterface, *, gesture_pace: float = 0.0, camera_hfov_deg: float = CAMERA_HFOV_DEG
+) -> list[Tool]:
     """Build the core tool set, bound to a particular robot.
 
     ``gesture_pace`` holds each motion step for that many seconds so it is visible on a real
@@ -57,12 +79,14 @@ def build_core_tools(robot: RobotInterface, *, gesture_pace: float = 0.0) -> lis
     def _robot_status(_: dict[str, Any]) -> ToolResult:
         return ToolResult(json.dumps(robot.get_state(), default=str, sort_keys=True))
 
+    view_note = _view_note(camera_hfov_deg)
+
     def _camera_result(got: str, missing: str) -> ToolResult:
         """Return the duck's current camera view, or an honest 'no camera' result."""
         png = robot.capture_frame()
         if png is None:
             return ToolResult(missing, ok=False)
-        return ToolResult(got, image_png=png)
+        return ToolResult(f"{got} {view_note}", image_png=png)
 
     def _see(_: dict[str, Any]) -> ToolResult:
         return _camera_result(
@@ -118,15 +142,19 @@ def build_core_tools(robot: RobotInterface, *, gesture_pace: float = 0.0) -> lis
         moved = False
         try:
             for _leg in range(2):
-                result = walk(robot, _EXPLORE_LEG_S, stop_at=_VIEWING_DISTANCE_M)
-                moved = moved or result.moved
-                robot.set_head(head_pitch=-0.2)  # look ahead after the leg
+                robot.set_head(head_pitch=_WALK_HEAD_PITCH)  # look ahead while walking
                 if gesture_pace:
                     time.sleep(gesture_pace)
+                result = walk(robot, _EXPLORE_LEG_S, stop_at=_VIEWING_DISTANCE_M)
+                moved = moved or result.moved
                 if result.blocked:
                     break
         finally:
             robot.stop()  # never leave the duck driving
+        if result is not None and result.blocked:  # something in front: look up at it
+            robot.set_head(head_pitch=_VIEW_HEAD_PITCH)
+            if gesture_pace:
+                time.sleep(gesture_pace)
         ahead = result.range_m if result is not None else None
         if result is not None and result.blocked and not moved:
             what = "I didn't walk: something is already close in front of me"
@@ -134,11 +162,11 @@ def build_core_tools(robot: RobotInterface, *, gesture_pace: float = 0.0) -> lis
                 what = f"I didn't walk: something is already about {ahead:.1f} m in front of me"
             what += " (turn to face somewhere else to go on)"
         elif result is not None and result.blocked:
-            what = "I walked up until something was close in front of me, and stopped"
+            what = "I walked up until something was close in front of me, and looked up at it"
             if ahead is not None:
                 what = (
                     f"I walked up until something was about {ahead:.1f} m in front of me, "
-                    "and stopped"
+                    "and stopped and looked up at it"
                 )
         else:
             what = "I roamed forward a little on my own, pausing to look"
@@ -198,8 +226,10 @@ def build_core_tools(robot: RobotInterface, *, gesture_pace: float = 0.0) -> lis
                 "description": (
                     "Degrees to turn; positive = left, negative = right. The duck turns "
                     "in a tight arc, stepping a little forward as it goes, and lands "
-                    "within about 15° of the request — so 20-120° to face a different "
-                    "piece, then check the view and correct if needed."
+                    "within a few degrees of the request. To face something in the "
+                    f"picture: at its left or right edge it is about {round(camera_hfov_deg / 2)}° "
+                    f"away, halfway to the edge about {round(camera_hfov_deg / 4)}° — the "
+                    "camera is narrow, so small turns. Then check the view and correct."
                 ),
             }
         },

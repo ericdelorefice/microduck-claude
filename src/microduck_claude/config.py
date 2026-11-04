@@ -35,6 +35,7 @@ class Config:
     edge_voice: str = "en-GB-ThomasNeural"  # edge-tts neural voice, for voice_output=edge
     edge_rate: str = "-8%"  # edge-tts rate delta; about 140 wpm, the dry-documentary sweet spot
     camera_url: str = "http://127.0.0.1:8080/frame"  # duck camera snapshot endpoint
+    camera_hfov_deg: float = 37.3  # picture width in degrees (alpha IMX219, mounted sideways)
     duck_ssh_host: str = ""
     duck_audio_device: str = "plughw:aic3104"
     duck_ssh_user: str = "microduck"
@@ -74,6 +75,7 @@ class Config:
             edge_voice=os.environ.get("MICRODUCK_EDGE_VOICE", "en-GB-ThomasNeural"),
             edge_rate=os.environ.get("MICRODUCK_EDGE_RATE", "-8%"),
             camera_url=os.environ.get("MICRODUCK_CAMERA_URL", "http://127.0.0.1:8080/frame"),
+            camera_hfov_deg=_float_env("MICRODUCK_CAMERA_HFOV_DEG", 37.3),
             duck_ssh_host=os.environ.get("MICRODUCK_DUCK_SSH_HOST", ""),
             duck_audio_device=os.environ.get("MICRODUCK_DUCK_AUDIO_DEVICE", "plughw:aic3104"),
             duck_ssh_user=os.environ.get("MICRODUCK_DUCK_SSH_USER", "microduck"),
@@ -84,6 +86,17 @@ class Config:
             explore_allow_rpc=os.environ.get("MICRODUCK_EXPLORE_ALLOW_RPC", "").lower()
             in ("1", "true", "yes", "on"),
         )
+
+
+def _float_env(name: str, default: float) -> float:
+    raw = os.environ.get(name)
+    if raw is None or not raw.strip():
+        return default
+    try:
+        value = float(raw)
+    except ValueError:
+        return default
+    return value if 1.0 <= value <= 179.0 else default
 
 
 def _int_env(name: str, default: int) -> int:

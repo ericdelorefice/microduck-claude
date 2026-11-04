@@ -217,3 +217,45 @@ def test_explore_stops_at_viewing_distance_and_says_so() -> None:
         and "I didn't walk: something is already about 0.6 m in front of me" in result.content
     )
     assert not any(c.method == "drive" for c in robot.calls)
+
+
+def test_camera_results_say_how_wide_the_view_is() -> None:
+    # The model can't judge a turn from a picture without knowing its width: the duck's camera
+    # is narrow, so a painting at the edge of the frame is only ~19° away, not 45°.
+    for name, args in (("see", {}), ("look_around", {}), ("turn", {"degrees": 30})):
+        tool = build_registry(FakeRobot(camera_frame=_FRAME)).get(name)
+        assert tool is not None
+        content = tool.run(args).content
+        assert "about 37° from edge to edge" in content, (name, content)
+        assert "edge is about 19°" in content and "halfway to the edge about 9°" in content
+
+
+def test_the_view_width_is_configurable_for_other_cameras() -> None:
+    tool = build_registry(FakeRobot(camera_frame=_FRAME), camera_hfov_deg=60.0).get("see")
+    assert tool is not None
+    assert "about 60° from edge to edge" in tool.run({}).content
+
+
+def test_no_view_note_without_a_picture() -> None:
+    tool = build_registry(FakeRobot()).get("see")  # no camera
+    assert tool is not None
+    assert "edge to edge" not in tool.run({}).content
+
+
+def test_turn_tool_explains_angles_in_the_picture() -> None:
+    tool = build_registry(FakeRobot()).get("turn")
+    assert tool is not None
+    spec = next(s for s in build_registry(FakeRobot()).specs() if s["name"] == "turn")
+    assert "about 19°" in spec["input_schema"]["properties"]["degrees"]["description"]
+
+
+def test_explore_looks_up_at_what_it_stopped_in_front_of() -> None:
+    # Walking, the head looks ahead (so the distance sensor sees what's in the way). Stopped in
+    # front of a painting, a level gaze only shows its bottom edge, so the duck looks up.
+    robot = FakeRobot(camera_frame=_FRAME)
+    robot.range_m = 0.6
+    tool = build_registry(robot).get("explore")
+    assert tool is not None
+    tool.run({})
+    heads = [c.kwargs["head_pitch"] for c in robot.calls if c.method == "set_head"]
+    assert heads and cast(float, heads[-1]) <= -0.7  # looking up when the picture is taken

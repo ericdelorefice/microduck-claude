@@ -139,9 +139,13 @@ def _run(*, voice: bool, explore: bool = False) -> int:
     # Explore roams autonomously, so it gets a restricted allow-list (perception + locomotion);
     # chat/voice get the full tool set, including memory. (The robot owns camera + keep-alive.)
     if explore:
-        registry = build_roam_registry(robot, gesture_pace=gesture_pace)
+        registry = build_roam_registry(
+            robot, gesture_pace=gesture_pace, camera_hfov_deg=config.camera_hfov_deg
+        )
     else:
-        registry = build_registry(robot, memory=memory, gesture_pace=gesture_pace)
+        registry = build_registry(
+            robot, memory=memory, gesture_pace=gesture_pace, camera_hfov_deg=config.camera_hfov_deg
+        )
     system = system_prompt_for(config.persona)
     try:
         if explore:
@@ -252,7 +256,8 @@ def _run_explore(
         "Be a real, curious duck: short, natural, plain-spoken — a little wonder, a little "
         "humour, nothing writerly or showy. React to what you actually see. Walk up to a "
         "painting, read its placard if you can, say what it is and what you make of it, then "
-        "wander to the next. Talk every step or two — you are only heard when you speak.\n"
+        "wander to the next. Talk every step or two — you are only heard when you speak. It "
+        "is all said out loud, so plain spoken sentences only: no lists, headings or bold.\n"
         "Moving: turn to face a piece (anything from about 20 to 120 degrees works; a turn takes "
         "a small step forward as it goes), then 'explore' to walk straight up to it; use "
         "look_around or see for a closer look. Say what you are about to do as you do it. If your "
