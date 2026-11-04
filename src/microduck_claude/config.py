@@ -25,6 +25,7 @@ class Config:
     memory_path: str = "~/.microduck-claude/memory.json"
     robot_backend: str = "fake"  # "fake" (in-process) | "rpc" (real duck-sim / robot)
     robot_socket: str = DEFAULT_SIM_SOCKET
+    tof_socket: str = ""  # tofd depth stream; empty = beside robot_socket, then /run/tofd
     api_version: int = API_VERSION
     voice_output: str = "host"  # "host" (Mac say) | "duck" (SSH) | "elevenlabs" | "edge" (neural)
     say_voice: str = ""  # macOS 'say' voice (e.g. "Daniel"); empty = auto-pick a working one
@@ -63,6 +64,7 @@ class Config:
             memory_path=os.environ.get("MICRODUCK_MEMORY_PATH", "~/.microduck-claude/memory.json"),
             robot_backend=os.environ.get("MICRODUCK_ROBOT_BACKEND", "fake").lower(),
             robot_socket=os.environ.get("MICRODUCK_ROBOT_SOCKET", DEFAULT_SIM_SOCKET),
+            tof_socket=os.environ.get("MICRODUCK_TOF_SOCKET", ""),
             api_version=_int_env("MICRODUCK_API_VERSION", API_VERSION),
             voice_output=os.environ.get("MICRODUCK_VOICE_OUTPUT", "host").lower(),
             say_voice=os.environ.get("MICRODUCK_SAY_VOICE", ""),

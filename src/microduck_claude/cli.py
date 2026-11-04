@@ -123,6 +123,7 @@ def _run(*, voice: bool, explore: bool = False) -> int:
             socket_path=config.robot_socket,
             api_version=config.api_version,
             camera_url=config.camera_url,
+            tof_socket=config.tof_socket,
         )
     except (OSError, JsonRpcError) as exc:
         print(

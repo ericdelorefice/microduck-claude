@@ -12,6 +12,8 @@ from __future__ import annotations
 
 import http.client
 import logging
+import math
+import statistics
 import time
 import urllib.error
 import urllib.request
@@ -42,6 +44,54 @@ def _looks_like_image(data: bytes) -> bool:
     return data[:4] == b"RIFF" and data[8:12] == b"WEBP"  # WEBP
 
 
+# A sensor reading older than this is treated as unknown: closing a control loop on a stale
+# heading or range is worse than falling back to a timed move.
+_SENSOR_MAX_AGE_S = 0.5
+
+# ToF zones that count. VL53L5/L8 status 5 is a fully valid range; 6 and 9 are valid with a
+# lower confidence. Anything else (no target, wrapped, sigma fail) is not a distance.
+_TOF_VALID = frozenset({5, 6, 9})
+
+
+def heading_from_state(state: dict[str, Any]) -> float | None:
+    """Body yaw (radians, + = CCW) from a ``robot.state``: odometry yaw, else the IMU quaternion."""
+    odom = state.get("odom")
+    if isinstance(odom, dict) and isinstance(odom.get("yaw"), (int, float)):
+        return float(odom["yaw"])
+    imu = state.get("imu")
+    quat = imu.get("quat") if isinstance(imu, dict) else None
+    if isinstance(quat, list) and len(quat) == 4 and all(isinstance(v, (int, float)) for v in quat):
+        w, x, y, z = (float(v) for v in quat)
+        return math.atan2(2 * (w * z + x * y), 1 - 2 * (y * y + z * z))
+    return None
+
+
+def range_from_tof_frame(frame: dict[str, Any]) -> float | None:
+    """Metres to what is straight ahead, from one 8×8 ``tof.frame``.
+
+    The median of the valid zones in the top three rows and the middle half of the columns: the
+    sensor looks where the head looks, and with the head tilted down for walking the lower rows
+    see the floor, not what the duck is about to walk into.
+    """
+    rows, cols = frame.get("rows"), frame.get("cols")
+    dist, status = frame.get("distance_mm"), frame.get("status")
+    if not (isinstance(rows, int) and isinstance(cols, int) and rows >= 3 and cols >= 4):
+        return None
+    if not (isinstance(dist, list) and isinstance(status, list)):
+        return None
+    if len(dist) < rows * cols or len(status) < rows * cols:
+        return None
+    zones = [
+        dist[r * cols + c]
+        for r in range(3)
+        for c in range(cols // 4, cols - cols // 4)
+        if status[r * cols + c] in _TOF_VALID and isinstance(dist[r * cols + c], int)
+    ]
+    if not zones:
+        return None
+    return round(statistics.median(zones) / 1000.0, 3)
+
+
 class RpcRobot:
     """A :class:`RobotInterface` backed by a JSON-RPC transport."""
 
@@ -50,13 +100,16 @@ class RpcRobot:
         transport: UnixSocketTransport,
         *,
         api_version: int = p.API_VERSION,
-        subscribe_hz: float = 2.0,
+        subscribe_hz: float = 20.0,
         camera_url: str = "",
+        tof: UnixSocketTransport | None = None,
     ) -> None:
+        # State at 20 Hz: closed-loop turns read the heading every control tick.
         self._t = transport
         self._api_version = api_version
         self._subscribe_hz = subscribe_hz
         self._camera_url = camera_url
+        self._tof = tof  # tofd's depth stream, if the body has one (see open_tof)
 
     def handshake(self) -> dict[str, Any] | None:
         """Perform the ``hello`` handshake and start a state subscription."""
@@ -67,7 +120,26 @@ class RpcRobot:
             self._t.request(p.ROBOT_SUBSCRIBE, {"hz": int(self._subscribe_hz)})
         return result if isinstance(result, dict) else None
 
+    def open_tof(self, socket_path: str) -> bool:
+        """Subscribe to tofd's depth stream for :meth:`range_ahead`. False if there is none."""
+        tof = UnixSocketTransport(socket_path)
+        try:
+            tof.connect()
+            answer = tof.request(p.TOF_STREAM)
+        except (OSError, JsonRpcError) as exc:
+            log.info("no ToF stream at %s (%s); walking without a distance stop", socket_path, exc)
+            tof.close()
+            return False
+        if isinstance(answer, dict) and answer.get("accepted") is False:
+            log.info("tofd has no sensor: %s", answer.get("reason"))
+            tof.close()
+            return False
+        self._tof = tof
+        return True
+
     def close(self) -> None:
+        if self._tof is not None:
+            self._tof.close()
         self._t.close()
 
     # -- intents ---------------------------------------------------------------
@@ -139,6 +211,18 @@ class RpcRobot:
 
     def get_state(self) -> dict[str, object]:
         return self._t.latest_state() or {}
+
+    def heading(self) -> float | None:
+        latest = self._t.latest(p.ROBOT_STATE)
+        if latest is None or latest[1] > _SENSOR_MAX_AGE_S:
+            return None
+        return heading_from_state(latest[0])
+
+    def range_ahead(self) -> float | None:
+        latest = self._tof.latest(p.TOF_FRAME) if self._tof is not None else None
+        if latest is None or latest[1] > _SENSOR_MAX_AGE_S:
+            return None
+        return range_from_tof_frame(latest[0])
 
     def capture_frame(self) -> bytes | None:
         """Fetch one camera frame over HTTP and validate it (see RobotInterface).
