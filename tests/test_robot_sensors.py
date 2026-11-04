@@ -40,3 +40,23 @@ def test_stale_readings_count_as_unknown() -> None:
     assert robot.heading() == 0.5
     transport._latest["robot.state"] = (transport._latest["robot.state"][0], -100.0)  # long ago
     assert robot.heading() is None
+
+
+def test_handshake_waits_for_the_first_state_when_subscribing() -> None:
+    # Otherwise a move made right after connecting has no heading yet and silently falls back
+    # to a timed move (seen on the sim).
+    class Transport:
+        def __init__(self) -> None:
+            self.calls = 0
+
+        def request(self, method: str, params: object = None) -> object:
+            return {}
+
+        def latest(self, method: str) -> tuple[dict[str, object], float] | None:
+            self.calls += 1
+            return ({"odom": {"yaw": 0.0}}, 0.0) if self.calls >= 3 else None
+
+    t = Transport()
+    robot = RpcRobot(t, subscribe_hz=20.0)  # type: ignore[arg-type]
+    robot.handshake()
+    assert t.calls >= 3 and robot.heading() == 0.0

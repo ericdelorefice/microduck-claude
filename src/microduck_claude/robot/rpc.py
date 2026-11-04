@@ -47,6 +47,7 @@ def _looks_like_image(data: bytes) -> bool:
 # A sensor reading older than this is treated as unknown: closing a control loop on a stale
 # heading or range is worse than falling back to a timed move.
 _SENSOR_MAX_AGE_S = 0.5
+_FIRST_STATE_WAIT_S = 1.0  # how long handshake waits for the first robot.state
 
 # ToF zones that count. VL53L5/L8 status 5 is a fully valid range; 6 and 9 are valid with a
 # lower confidence. Anything else (no target, wrapped, sigma fail) is not a distance.
@@ -118,6 +119,11 @@ class RpcRobot:
             # robot.subscribe is a request; hz is an integer (frames arrive as
             # robot.state notifications thereafter).
             self._t.request(p.ROBOT_SUBSCRIBE, {"hz": int(self._subscribe_hz)})
+            # Wait (briefly) for the first frame, so a move made straight after connecting has a
+            # heading to close the loop on instead of quietly falling back to a timed move.
+            deadline = time.monotonic() + _FIRST_STATE_WAIT_S
+            while self._t.latest(p.ROBOT_STATE) is None and time.monotonic() < deadline:
+                time.sleep(0.01)
         return result if isinstance(result, dict) else None
 
     def open_tof(self, socket_path: str) -> bool:
