@@ -26,11 +26,13 @@ class Config:
     robot_backend: str = "fake"  # "fake" (in-process) | "rpc" (real duck-sim / robot)
     robot_socket: str = DEFAULT_SIM_SOCKET
     api_version: int = API_VERSION
-    voice_output: str = "host"  # "host" (Mac say) | "duck" (SSH) | "elevenlabs" (cloud neural)
+    voice_output: str = "host"  # "host" (Mac say) | "duck" (SSH) | "elevenlabs" | "edge" (neural)
     say_voice: str = ""  # macOS 'say' voice (e.g. "Daniel"); empty = auto-pick a working one
     say_rate: int = 0  # macOS 'say' words-per-minute (0 = system default; ~165 reads narrator-ish)
     elevenlabs_voice: str = ""  # ElevenLabs voice id, for voice_output=elevenlabs
     elevenlabs_model: str = "eleven_multilingual_v2"  # ElevenLabs model id
+    edge_voice: str = "en-GB-ThomasNeural"  # edge-tts neural voice, for voice_output=edge
+    edge_rate: str = "-8%"  # edge-tts rate delta; about 140 wpm, the dry-documentary sweet spot
     camera_url: str = "http://127.0.0.1:8080/frame"  # duck camera snapshot endpoint
     duck_ssh_host: str = ""
     duck_audio_device: str = "plughw:aic3104"
@@ -67,6 +69,8 @@ class Config:
             say_rate=_int_env("MICRODUCK_SAY_RATE", 0),
             elevenlabs_voice=os.environ.get("MICRODUCK_ELEVENLABS_VOICE", ""),
             elevenlabs_model=os.environ.get("MICRODUCK_ELEVENLABS_MODEL", "eleven_multilingual_v2"),
+            edge_voice=os.environ.get("MICRODUCK_EDGE_VOICE", "en-GB-ThomasNeural"),
+            edge_rate=os.environ.get("MICRODUCK_EDGE_RATE", "-8%"),
             camera_url=os.environ.get("MICRODUCK_CAMERA_URL", "http://127.0.0.1:8080/frame"),
             duck_ssh_host=os.environ.get("MICRODUCK_DUCK_SSH_HOST", ""),
             duck_audio_device=os.environ.get("MICRODUCK_DUCK_AUDIO_DEVICE", "plughw:aic3104"),
