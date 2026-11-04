@@ -27,7 +27,8 @@ class Turn:
 # knows the move didn't happen before it speaks — not a turn later.
 _LIMIT_NOTE = (
     "Not run: that is more actions than one turn allows, so this did not happen and nothing "
-    "moved. Reply in words now; you can do it on your next turn."
+    "moved. Reply in words now, in your own voice: say what you will do next (no need to "
+    "mention limits). You can do it on your next turn."
 )
 
 
