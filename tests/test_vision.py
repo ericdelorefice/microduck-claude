@@ -1,7 +1,10 @@
 from __future__ import annotations
 
 import base64
+import math
 from typing import cast
+
+import pytest
 
 from microduck_claude.assembly import build_registry
 from microduck_claude.brain import AnthropicLLM, ToolResult
@@ -143,26 +146,22 @@ def test_turn_zero_degrees_does_not_move() -> None:
 
 
 def test_turn_command_uses_full_yaw_and_scales_duration() -> None:
-    from microduck_claude.tools.core import (
-        _TURN_LEFT_DEG_PER_S,
-        _TURN_MIN_S,
-        _TURN_VX,
-        _turn_command,
-    )
+    from microduck_claude.robot.motion import TURN_LEFT_DEG_PER_S, TURN_MIN_S, TURN_VX
+    from microduck_claude.robot.motion import turn_command as _turn_command
 
     # Full |vyaw| with a slow step forward; the angle is carried by the duration, and a fine
     # request clamps to a short floor.
     big_vx, big_vyaw, big_dur = _turn_command(90.0)
     fine_vx, fine_vyaw, fine_dur = _turn_command(10.0)
-    assert big_vx == fine_vx == _TURN_VX
+    assert big_vx == fine_vx == TURN_VX
     assert abs(big_vyaw) == 1.0 and abs(fine_vyaw) == 1.0
-    assert big_dur == 90.0 / _TURN_LEFT_DEG_PER_S  # duration carries the angle
-    assert fine_dur == _TURN_MIN_S and big_dur > fine_dur  # fine clamps to the floor
+    assert big_dur == 90.0 / TURN_LEFT_DEG_PER_S  # duration carries the angle
+    assert fine_dur == TURN_MIN_S and big_dur > fine_dur  # fine clamps to the floor
     assert _turn_command(30.0)[1] > 0 and _turn_command(-30.0)[1] < 0  # sign gives direction
 
 
 def test_turn_command_gives_left_turns_longer() -> None:
-    from microduck_claude.tools.core import _turn_command
+    from microduck_claude.robot.motion import turn_command as _turn_command
 
     # The gait swings right more readily than left (measured), so the same angle needs longer
     # held to the left.
@@ -181,3 +180,40 @@ def test_turn_uses_full_yaw_for_both_fine_and_big() -> None:
     fine_yaw = abs(cast(float, next(c.kwargs["vyaw"] for c in fine.calls if c.method == "drive")))
     big_yaw = abs(cast(float, next(c.kwargs["vyaw"] for c in big.calls if c.method == "drive")))
     assert fine_yaw == 1.0 and big_yaw == 1.0
+
+
+def test_turn_reports_the_angle_the_duck_actually_turned(monkeypatch: pytest.MonkeyPatch) -> None:
+    # A body with a heading: the tool reports the measured turn, and flags a big miss, so the
+    # model corrects from what happened. This one jams at 45° (pressed against something).
+    class Jammed(FakeRobot):
+        def __init__(self) -> None:
+            super().__init__(camera_frame=_FRAME)
+            self.heading_rad = 0.0
+
+        def drive(self, vx: float, vy: float, vyaw: float) -> None:
+            super().drive(vx, vy, vyaw)
+            turned = (self.heading_rad or 0.0) + vyaw * 0.2
+            self.heading_rad = max(-math.pi / 4, min(math.pi / 4, turned))
+
+    from microduck_claude.robot import motion
+
+    clock = [0.0]  # fake time, so the stall and settle waits cost nothing
+    monkeypatch.setattr(motion, "_now", lambda: clock[0])
+    monkeypatch.setattr(motion, "_sleep", lambda dt: clock.__setitem__(0, clock[0] + dt))
+    tool = build_registry(Jammed()).get("turn")
+    assert tool is not None
+    result = tool.run({"degrees": 90})
+    assert result.ok and "I turned 45° to the left (you asked for 90°)" in result.content
+
+
+def test_explore_stops_at_viewing_distance_and_says_so() -> None:
+    robot = FakeRobot(camera_frame=_FRAME)
+    robot.range_m = 0.6  # already closer than viewing distance: it shouldn't walk at all
+    tool = build_registry(robot).get("explore")
+    assert tool is not None
+    result = tool.run({})
+    assert (
+        result.ok
+        and "I didn't walk: something is already about 0.6 m in front of me" in result.content
+    )
+    assert not any(c.method == "drive" for c in robot.calls)

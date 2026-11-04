@@ -22,6 +22,7 @@ from ..expressions import (
 )
 from ..robot import JsonRpcError
 from ..robot.interface import RobotInterface
+from ..robot.motion import turn_by, walk
 from .base import FunctionTool, Risk, Tool, ToolResult
 
 _NO_ARGS_SCHEMA: dict[str, Any] = {
@@ -31,35 +32,10 @@ _NO_ARGS_SCHEMA: dict[str, Any] = {
 }
 
 
-# Turning is a gait, not an instant pivot. Measured on the sim walk policy: yaw with no forward
-# velocity mostly does nothing (0 of 4 spins engaged), and |vyaw| below 1.0 barely rotates. Full
-# yaw while stepping slowly forward — a tight arc — engaged on every one of 16 trials, with no
-# start-up lag, about 32°/s to the left and 41°/s to the right (the gait leans right), drifting
-# only ~0.25 m. So a turn is a full-yaw arc, its length set by the angle and the side. The result
-# scatters by ~15°, so the model sees where it ended up and corrects from there.
-_TURN_VX = 0.25  # forward step that lets the gait turn at all
-_TURN_LEFT_DEG_PER_S = 32.0  # measured arc-turn rates on the sim gait
-_TURN_RIGHT_DEG_PER_S = 41.0
-_TURN_MIN_S = 0.6  # shortest arc worth commanding (~20°)
-
-# The sim walk gait curves to the RIGHT as it walks forward (measured), worse the faster it goes. A
-# constant small LEFT yaw while driving cancels that, so the duck walks roughly straight and reaches
-# the piece it faces instead of veering into a pillar. Faster than the old timid 0.45 (~0.35 m/s and
-# straight). Calibrated on the sim; the gait is noisy, so this corrects, not cures.
-_WALK_VX = 0.6  # 0.8 overshot into walls; 0.6 is controlled and faster than old 0.45
-_WALK_YAW_TRIM = 0.3  # constant left yaw that cancels the gait's rightward curve at _WALK_VX
-
-
-def _turn_command(degrees: float) -> tuple[float, float, float]:
-    """Pick ``(vx, vyaw, duration)`` for a turn of about ``degrees`` (sign gives direction).
-
-    A tight full-yaw arc — the sim gait does not turn on the spot or at lower |vyaw| — held for as
-    long as that side's measured rate needs. Small requests clamp to ``_TURN_MIN_S``.
-    """
-    left = degrees > 0
-    rate = _TURN_LEFT_DEG_PER_S if left else _TURN_RIGHT_DEG_PER_S
-    duration = max(_TURN_MIN_S, abs(degrees) / rate)
-    return (_TURN_VX, 1.0 if left else -1.0, duration)
+# How far from a painting to stop: close enough to read the placard, far enough back that the
+# picture (hung at ~0.9 m) is in view — at ~0.5 m the duck said it was "right under it".
+_VIEWING_DISTANCE_M = 0.9
+_EXPLORE_LEG_S = 2.5  # two legs of this, looking between them, per explore
 
 
 def build_core_tools(robot: RobotInterface, *, gesture_pace: float = 0.0) -> list[Tool]:
@@ -133,31 +109,55 @@ def build_core_tools(robot: RobotInterface, *, gesture_pace: float = 0.0) -> lis
         return f"do a little {arguments.get('gesture')}"
 
     def _explore(_: dict[str, Any]) -> ToolResult:
-        # A bounded, safe autonomous roam: two short forward legs, looking between them. The
-        # caps live here (not with the model) and the duck always stops at the end. Sim-safe as
-        # written; a physical robot needs hardware limits (speed cap, tilt/bump stop, a kill)
-        # first — see PLAN §6.
+        # A bounded, safe autonomous roam: up to two short forward legs, holding its heading and
+        # looking between them, stopping at viewing distance from whatever is ahead when the
+        # body has a distance sensor. The caps live here (not with the model) and the duck always
+        # stops at the end. Sim-safe as written; a physical robot needs hardware limits (speed
+        # cap, tilt/bump stop, a kill) first — see PLAN §6.
+        result = None
+        moved = False
         try:
             for _leg in range(2):
-                robot.drive_for(_WALK_VX, 0.0, _WALK_YAW_TRIM, duration=2.5)  # straight + faster
+                result = walk(robot, _EXPLORE_LEG_S, stop_at=_VIEWING_DISTANCE_M)
+                moved = moved or result.moved
                 robot.set_head(head_pitch=-0.2)  # look ahead after the leg
                 if gesture_pace:
                     time.sleep(gesture_pace)
+                if result.blocked:
+                    break
         finally:
             robot.stop()  # never leave the duck driving
+        ahead = result.range_m if result is not None else None
+        if result is not None and result.blocked and not moved:
+            what = "I didn't walk: something is already close in front of me"
+            if ahead is not None:
+                what = f"I didn't walk: something is already about {ahead:.1f} m in front of me"
+            what += " (turn to face somewhere else to go on)"
+        elif result is not None and result.blocked:
+            what = "I walked up until something was close in front of me, and stopped"
+            if ahead is not None:
+                what = (
+                    f"I walked up until something was about {ahead:.1f} m in front of me, "
+                    "and stopped"
+                )
+        else:
+            what = "I roamed forward a little on my own, pausing to look"
+            if ahead is not None:
+                what += f"; there's about {ahead:.1f} m of space ahead"
         return _camera_result(
-            "I roamed forward a little on my own, pausing to look — here's where I ended up.",
-            "I had a short roam around, but my camera isn't available to show what I "
-            "found (run the sim with DUCK_SIM_CAMERAS=a).",
+            f"{what} — here's where I ended up.",
+            f"{what}, but my camera isn't available to show what I found "
+            "(run the sim with DUCK_SIM_CAMERAS=a).",
         )
 
     def _explore_preview(_: dict[str, Any]) -> str:
         return "roam around a little on my own to see what's here"
 
     def _turn(arguments: dict[str, Any]) -> ToolResult:
-        # Turn to face a new direction (a tight arc — see _turn_command), then report the new
-        # view. Bounded (|angle| <= 180) and always stops. Positive = left (CCW), negative =
-        # right. The body's drive_for keeps the intent fresh so the walk policy actually turns.
+        # Turn to face a new direction (a tight arc, by heading when the body reports one — see
+        # robot.motion), then report the new view and the angle actually turned, so the model
+        # corrects from what happened rather than what it asked for. Bounded (|angle| <= 180),
+        # time-capped, and always stops. Positive = left (CCW), negative = right.
         raw = arguments.get("degrees", 60)
         try:
             degrees = max(-180.0, min(180.0, float(raw)))
@@ -169,17 +169,20 @@ def build_core_tools(robot: RobotInterface, *, gesture_pace: float = 0.0) -> lis
                 "I didn't need to turn, but my camera isn't available "
                 "(run the sim with DUCK_SIM_CAMERAS=a).",
             )
-        vx, vyaw, duration = _turn_command(degrees)  # a tight arc; the gait won't spin on the spot
-        robot.drive_for(vx, 0.0, vyaw, duration=duration)  # the body owns the keep-alive
+        result = turn_by(robot, degrees)
         robot.set_head(head_pitch=-0.1)  # settle, gaze roughly level
         if gesture_pace:
             time.sleep(gesture_pace)
-        side = "left" if degrees > 0 else "right"
+        if result.turned_deg is not None:  # measured by the duck's own heading
+            turned = result.turned_deg
+            did = f"I turned {abs(round(turned))}° to the {'left' if turned > 0 else 'right'}"
+            if abs(turned - degrees) > 10:
+                did += f" (you asked for {abs(int(degrees))}°)"
+        else:
+            did = f"I turned about {abs(int(degrees))}° to the {'left' if degrees > 0 else 'right'}"
         return _camera_result(
-            f"I turned about {abs(int(degrees))}° to the {side} — here's what's "
-            "in front of me now.",
-            f"I turned about {abs(int(degrees))}° to the {side}, but my camera isn't "
-            "available (run the sim with DUCK_SIM_CAMERAS=a).",
+            f"{did} — here's what's in front of me now.",
+            f"{did}, but my camera isn't available (run the sim with DUCK_SIM_CAMERAS=a).",
         )
 
     def _turn_preview(arguments: dict[str, Any]) -> str:
