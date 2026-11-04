@@ -31,13 +31,35 @@ _NO_ARGS_SCHEMA: dict[str, Any] = {
 }
 
 
-# Turning is a gait, not an instant pivot: the walk policy needs the yaw intent SUSTAINED to
-# engage (a brief command barely moves, and robotd's deadman zeros the twist between commands).
-# So a turn streams for a startup runway plus an angle-proportional time, with a floor so even a
-# small turn actually pivots. Rates are approximate — the model sees the result and can turn again.
-_TURN_START_S = 1.2  # gait startup before meaningful rotation
-_TURN_DEG_PER_S = 20.0  # effective yaw rate once engaged (at |vyaw|=1.0)
-_TURN_MIN_S = 2.5  # minimum sustained turn, so the gait always engages
+# Turning is a gait, not an instant pivot. Measured on the sim walk policy: yaw with no forward
+# velocity mostly does nothing (0 of 4 spins engaged), and |vyaw| below 1.0 barely rotates. Full
+# yaw while stepping slowly forward — a tight arc — engaged on every one of 16 trials, with no
+# start-up lag, about 32°/s to the left and 41°/s to the right (the gait leans right), drifting
+# only ~0.25 m. So a turn is a full-yaw arc, its length set by the angle and the side. The result
+# scatters by ~15°, so the model sees where it ended up and corrects from there.
+_TURN_VX = 0.25  # forward step that lets the gait turn at all
+_TURN_LEFT_DEG_PER_S = 32.0  # measured arc-turn rates on the sim gait
+_TURN_RIGHT_DEG_PER_S = 41.0
+_TURN_MIN_S = 0.6  # shortest arc worth commanding (~20°)
+
+# The sim walk gait curves to the RIGHT as it walks forward (measured), worse the faster it goes. A
+# constant small LEFT yaw while driving cancels that, so the duck walks roughly straight and reaches
+# the piece it faces instead of veering into a pillar. Faster than the old timid 0.45 (~0.35 m/s and
+# straight). Calibrated on the sim; the gait is noisy, so this corrects, not cures.
+_WALK_VX = 0.6  # 0.8 overshot into walls; 0.6 is controlled and faster than old 0.45
+_WALK_YAW_TRIM = 0.3  # constant left yaw that cancels the gait's rightward curve at _WALK_VX
+
+
+def _turn_command(degrees: float) -> tuple[float, float, float]:
+    """Pick ``(vx, vyaw, duration)`` for a turn of about ``degrees`` (sign gives direction).
+
+    A tight full-yaw arc — the sim gait does not turn on the spot or at lower |vyaw| — held for as
+    long as that side's measured rate needs. Small requests clamp to ``_TURN_MIN_S``.
+    """
+    left = degrees > 0
+    rate = _TURN_LEFT_DEG_PER_S if left else _TURN_RIGHT_DEG_PER_S
+    duration = max(_TURN_MIN_S, abs(degrees) / rate)
+    return (_TURN_VX, 1.0 if left else -1.0, duration)
 
 
 def build_core_tools(robot: RobotInterface, *, gesture_pace: float = 0.0) -> list[Tool]:
@@ -117,7 +139,7 @@ def build_core_tools(robot: RobotInterface, *, gesture_pace: float = 0.0) -> lis
         # first — see PLAN §6.
         try:
             for _leg in range(2):
-                robot.drive_for(0.45, 0.0, 0.0, duration=2.5)  # the body owns the keep-alive
+                robot.drive_for(_WALK_VX, 0.0, _WALK_YAW_TRIM, duration=2.5)  # straight + faster
                 robot.set_head(head_pitch=-0.2)  # look ahead after the leg
                 if gesture_pace:
                     time.sleep(gesture_pace)
@@ -133,9 +155,9 @@ def build_core_tools(robot: RobotInterface, *, gesture_pace: float = 0.0) -> lis
         return "roam around a little on my own to see what's here"
 
     def _turn(arguments: dict[str, Any]) -> ToolResult:
-        # Rotate roughly in place to face a new direction, then report the new view. Bounded
-        # (|angle| <= 180) and always stops. Positive = left (CCW), negative = right. The yaw
-        # intent is sustained via _sustain_drive so the walk policy actually pivots on a real body.
+        # Turn to face a new direction (a tight arc — see _turn_command), then report the new
+        # view. Bounded (|angle| <= 180) and always stops. Positive = left (CCW), negative =
+        # right. The body's drive_for keeps the intent fresh so the walk policy actually turns.
         raw = arguments.get("degrees", 60)
         try:
             degrees = max(-180.0, min(180.0, float(raw)))
@@ -147,9 +169,8 @@ def build_core_tools(robot: RobotInterface, *, gesture_pace: float = 0.0) -> lis
                 "I didn't need to turn, but my camera isn't available "
                 "(run the sim with DUCK_SIM_CAMERAS=a).",
             )
-        vyaw = 1.0 if degrees > 0 else -1.0
-        duration = max(_TURN_MIN_S, _TURN_START_S + abs(degrees) / _TURN_DEG_PER_S)
-        robot.drive_for(0.0, 0.0, vyaw, duration=duration)  # the body owns the keep-alive
+        vx, vyaw, duration = _turn_command(degrees)  # a tight arc; the gait won't spin on the spot
+        robot.drive_for(vx, 0.0, vyaw, duration=duration)  # the body owns the keep-alive
         robot.set_head(head_pitch=-0.1)  # settle, gaze roughly level
         if gesture_pace:
             time.sleep(gesture_pace)
@@ -171,7 +192,12 @@ def build_core_tools(robot: RobotInterface, *, gesture_pace: float = 0.0) -> lis
                 "type": "number",
                 "minimum": -180,
                 "maximum": 180,
-                "description": "Degrees to turn in place; positive = left, negative = right.",
+                "description": (
+                    "Degrees to turn; positive = left, negative = right. The duck turns "
+                    "in a tight arc, stepping a little forward as it goes, and lands "
+                    "within about 15° of the request — so 20-120° to face a different "
+                    "piece, then check the view and correct if needed."
+                ),
             }
         },
         "required": ["degrees"],
@@ -251,7 +277,7 @@ def build_core_tools(robot: RobotInterface, *, gesture_pace: float = 0.0) -> lis
         ),
         FunctionTool(
             "turn",
-            "Turn in place to face a new direction (positive degrees = left, negative = right), "
+            "Turn to face a new direction (positive degrees = left, negative = right), "
             "then report what the duck now sees. Use it to look toward a different wall or object "
             "before walking to it or examining it.",
             Risk.ACTION,

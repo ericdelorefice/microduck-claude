@@ -85,7 +85,7 @@ def test_explore_is_a_gated_action() -> None:
     assert tool.risk is Risk.ACTION
 
 
-def test_turn_rotates_in_place_and_always_stops() -> None:
+def test_turn_walks_a_tight_arc_and_always_stops() -> None:
     robot = FakeRobot(camera_frame=_FRAME)
     tool = build_registry(robot).get("turn")
     assert tool is not None
@@ -98,9 +98,13 @@ def test_turn_rotates_in_place_and_always_stops() -> None:
     last_stop = max(i for i, c in enumerate(robot.calls) if c.method == "stop")
     assert last_stop > last_drive  # stopped after driving — never left the duck turning
     drives = [c for c in robot.calls if c.method == "drive"]
-    # a turn in place: yaw is set, with no forward or sideways velocity
+    # The gait won't pivot on the spot, so a turn is a tight arc: yaw plus a slow step forward,
+    # never sideways and never a full walking pace.
     assert any(
-        c.kwargs["vyaw"] != 0.0 and c.kwargs["vx"] == 0.0 and c.kwargs["vy"] == 0.0 for c in drives
+        c.kwargs["vyaw"] != 0.0
+        and 0.0 < cast(float, c.kwargs["vx"]) <= 0.3
+        and c.kwargs["vy"] == 0.0
+        for c in drives
     )
 
 
@@ -136,3 +140,44 @@ def test_turn_zero_degrees_does_not_move() -> None:
     result = tool.run({"degrees": 0})
     assert result.ok
     assert not any(c.method == "drive" for c in robot.calls)  # a 0 degree turn does not rotate
+
+
+def test_turn_command_uses_full_yaw_and_scales_duration() -> None:
+    from microduck_claude.tools.core import (
+        _TURN_LEFT_DEG_PER_S,
+        _TURN_MIN_S,
+        _TURN_VX,
+        _turn_command,
+    )
+
+    # Full |vyaw| with a slow step forward; the angle is carried by the duration, and a fine
+    # request clamps to a short floor.
+    big_vx, big_vyaw, big_dur = _turn_command(90.0)
+    fine_vx, fine_vyaw, fine_dur = _turn_command(10.0)
+    assert big_vx == fine_vx == _TURN_VX
+    assert abs(big_vyaw) == 1.0 and abs(fine_vyaw) == 1.0
+    assert big_dur == 90.0 / _TURN_LEFT_DEG_PER_S  # duration carries the angle
+    assert fine_dur == _TURN_MIN_S and big_dur > fine_dur  # fine clamps to the floor
+    assert _turn_command(30.0)[1] > 0 and _turn_command(-30.0)[1] < 0  # sign gives direction
+
+
+def test_turn_command_gives_left_turns_longer() -> None:
+    from microduck_claude.tools.core import _turn_command
+
+    # The gait swings right more readily than left (measured), so the same angle needs longer
+    # held to the left.
+    assert _turn_command(90.0)[2] > _turn_command(-90.0)[2]
+
+
+def test_turn_uses_full_yaw_for_both_fine_and_big() -> None:
+    # The sim walk gait only pivots at full |vyaw|, so a fine turn uses the same yaw as a big one
+    # (the old scaled-down yaw produced no rotation at all on the real gait).
+    fine, big = FakeRobot(camera_frame=_FRAME), FakeRobot(camera_frame=_FRAME)
+    fine_tool = build_registry(fine).get("turn")
+    big_tool = build_registry(big).get("turn")
+    assert fine_tool is not None and big_tool is not None
+    fine_tool.run({"degrees": 10})
+    big_tool.run({"degrees": 90})
+    fine_yaw = abs(cast(float, next(c.kwargs["vyaw"] for c in fine.calls if c.method == "drive")))
+    big_yaw = abs(cast(float, next(c.kwargs["vyaw"] for c in big.calls if c.method == "drive")))
+    assert fine_yaw == 1.0 and big_yaw == 1.0
