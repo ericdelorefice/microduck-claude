@@ -125,6 +125,7 @@ class FakeLLM:
     def __init__(self, responses: list[LLMResponse]) -> None:
         self._responses = list(responses)
         self.started: dict[str, Any] | None = None
+        self.tool_results: list[list[Any]] = []  # every batch the brain answered, in order
 
     def start(self, system: str, tools: list[dict[str, Any]]) -> None:
         self.started = {"system": system, "tools": tools}
@@ -133,6 +134,7 @@ class FakeLLM:
         return self._next()
 
     def send_tool_results(self, results: list[Any]) -> LLMResponse:
+        self.tool_results.append(list(results))
         return self._next()
 
     def _next(self) -> LLMResponse:
