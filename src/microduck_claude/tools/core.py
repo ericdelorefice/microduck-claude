@@ -22,6 +22,7 @@ from ..expressions import (
 )
 from ..robot import JsonRpcError
 from ..robot.interface import RobotInterface
+from ..robot.motion import turn_by, walk
 from .base import FunctionTool, Risk, Tool, ToolResult
 
 _NO_ARGS_SCHEMA: dict[str, Any] = {
@@ -31,13 +32,22 @@ _NO_ARGS_SCHEMA: dict[str, Any] = {
 }
 
 
-# Turning is a gait, not an instant pivot: the walk policy needs the yaw intent SUSTAINED to
-# engage (a brief command barely moves, and robotd's deadman zeros the twist between commands).
-# So a turn streams for a startup runway plus an angle-proportional time, with a floor so even a
-# small turn actually pivots. Rates are approximate — the model sees the result and can turn again.
-_TURN_START_S = 1.2  # gait startup before meaningful rotation
-_TURN_DEG_PER_S = 20.0  # effective yaw rate once engaged (at |vyaw|=1.0)
-_TURN_MIN_S = 2.5  # minimum sustained turn, so the gait always engages
+# How far from a painting to stop. The camera sees ~31° above its axis (62° tall, upright), plus
+# ~11° of head tilt when looking: to get the top of a gallery frame (~1.45 m) in view from a head
+# at ~0.22 m takes ~1.3 m. At 0.9 m the duck said it was "right under it". Placards still read.
+_VIEWING_DISTANCE_M = 1.3
+# Head pitch (negative = up). Walking it looks ahead, so the distance sensor sees what is in the
+# way; stopped in front of a painting, a level gaze shows only its bottom edge (measured on the sim
+# at 1.3 m: -0.45 clips the top of the frame, -0.7 to -0.95 frame the whole picture).
+_WALK_HEAD_PITCH = -0.2
+_VIEW_HEAD_PITCH = -0.8
+_EXPLORE_LEG_S = 2.5  # two legs of this, looking between them, per explore
+
+# How wide the head camera's picture is, left edge to right edge. The alpha robot's IMX219 sees 62°
+# across its long side and is mounted a quarter turn over, so the upright picture is the short
+# side: 2·atan(tan 31° · 9/16) ≈ 37°. The gallery sim is set to match (scripts/gallery). Without it
+# the model guessed "off to the right" meant ~45° and overshot; at the edge it is only ~19°.
+CAMERA_HFOV_DEG = 37.3
 
 
 def _turn_degrees(arguments: dict[str, Any]) -> float | None:
@@ -53,7 +63,17 @@ def _turn_degrees(arguments: dict[str, Any]) -> float | None:
         return None
 
 
-def build_core_tools(robot: RobotInterface, *, gesture_pace: float = 0.0) -> list[Tool]:
+def _view_note(hfov_deg: float) -> str:
+    edge, half = hfov_deg / 2, hfov_deg / 4
+    return (
+        f"(My camera sees about {round(hfov_deg)}° from edge to edge: something at the left or "
+        f"right edge is about {round(edge)}° that way, halfway to the edge about {round(half)}°.)"
+    )
+
+
+def build_core_tools(
+    robot: RobotInterface, *, gesture_pace: float = 0.0, camera_hfov_deg: float = CAMERA_HFOV_DEG
+) -> list[Tool]:
     """Build the core tool set, bound to a particular robot.
 
     ``gesture_pace`` holds each motion step for that many seconds so it is visible on a real
@@ -72,12 +92,14 @@ def build_core_tools(robot: RobotInterface, *, gesture_pace: float = 0.0) -> lis
     def _robot_status(_: dict[str, Any]) -> ToolResult:
         return ToolResult(json.dumps(robot.get_state(), default=str, sort_keys=True))
 
+    view_note = _view_note(camera_hfov_deg)
+
     def _camera_result(got: str, missing: str) -> ToolResult:
         """Return the duck's current camera view, or an honest 'no camera' result."""
         png = robot.capture_frame()
         if png is None:
             return ToolResult(missing, ok=False)
-        return ToolResult(got, image_png=png)
+        return ToolResult(f"{got} {view_note}", image_png=png)
 
     def _see(_: dict[str, Any]) -> ToolResult:
         return _camera_result(
@@ -124,31 +146,59 @@ def build_core_tools(robot: RobotInterface, *, gesture_pace: float = 0.0) -> lis
         return f"do a little {arguments.get('gesture')}"
 
     def _explore(_: dict[str, Any]) -> ToolResult:
-        # A bounded, safe autonomous roam: two short forward legs, looking between them. The
-        # caps live here (not with the model) and the duck always stops at the end. Sim-safe as
-        # written; a physical robot needs hardware limits (speed cap, tilt/bump stop, a kill)
-        # first — see PLAN §6.
+        # A bounded, safe autonomous roam: up to two short forward legs, holding its heading and
+        # looking between them, stopping at viewing distance from whatever is ahead when the
+        # body has a distance sensor. The caps live here (not with the model) and the duck always
+        # stops at the end. Sim-safe as written; a physical robot needs hardware limits (speed
+        # cap, tilt/bump stop, a kill) first — see PLAN §6.
+        result = None
+        moved = False
         try:
             for _leg in range(2):
-                robot.drive_for(0.45, 0.0, 0.0, duration=2.5)  # the body owns the keep-alive
-                robot.set_head(head_pitch=-0.2)  # look ahead after the leg
+                robot.set_head(head_pitch=_WALK_HEAD_PITCH)  # look ahead while walking
                 if gesture_pace:
                     time.sleep(gesture_pace)
+                result = walk(robot, _EXPLORE_LEG_S, stop_at=_VIEWING_DISTANCE_M)
+                moved = moved or result.moved
+                if result.blocked:
+                    break
         finally:
             robot.stop()  # never leave the duck driving
+        if result is not None and result.blocked:  # something in front: look up at it
+            robot.set_head(head_pitch=_VIEW_HEAD_PITCH)
+            if gesture_pace:
+                time.sleep(gesture_pace)
+        ahead = result.range_m if result is not None else None
+        if result is not None and result.blocked and not moved:
+            what = "I didn't walk: something is already close in front of me"
+            if ahead is not None:
+                what = f"I didn't walk: something is already about {ahead:.1f} m in front of me"
+            what += " (turn to face somewhere else to go on)"
+        elif result is not None and result.blocked:
+            what = "I walked up until something was close in front of me, and looked up at it"
+            if ahead is not None:
+                what = (
+                    f"I walked up until something was about {ahead:.1f} m in front of me, "
+                    "and stopped and looked up at it"
+                )
+        else:
+            what = "I roamed forward a little on my own, pausing to look"
+            if ahead is not None:
+                what += f"; there's about {ahead:.1f} m of space ahead"
         return _camera_result(
-            "I roamed forward a little on my own, pausing to look — here's where I ended up.",
-            "I had a short roam around, but my camera isn't available to show what I "
-            "found (run the sim with DUCK_SIM_CAMERAS=a).",
+            f"{what} — here's where I ended up.",
+            f"{what}, but my camera isn't available to show what I found "
+            "(run the sim with DUCK_SIM_CAMERAS=a).",
         )
 
     def _explore_preview(_: dict[str, Any]) -> str:
         return "roam around a little on my own to see what's here"
 
     def _turn(arguments: dict[str, Any]) -> ToolResult:
-        # Rotate roughly in place to face a new direction, then report the new view. Bounded
-        # (|angle| <= 180) and always stops. Positive = left (CCW), negative = right. The yaw
-        # intent is sustained via _sustain_drive so the walk policy actually pivots on a real body.
+        # Turn to face a new direction (a tight arc, by heading when the body reports one — see
+        # robot.motion), then report the new view and the angle actually turned, so the model
+        # corrects from what happened rather than what it asked for. Bounded (|angle| <= 180),
+        # time-capped, and always stops. Positive = left (CCW), negative = right.
         degrees = _turn_degrees(arguments)
         if degrees is None:
             return ToolResult("'degrees' must be a number between -180 and 180", ok=False)
@@ -158,18 +208,20 @@ def build_core_tools(robot: RobotInterface, *, gesture_pace: float = 0.0) -> lis
                 "I didn't need to turn, but my camera isn't available "
                 "(run the sim with DUCK_SIM_CAMERAS=a).",
             )
-        vyaw = 1.0 if degrees > 0 else -1.0
-        duration = max(_TURN_MIN_S, _TURN_START_S + abs(degrees) / _TURN_DEG_PER_S)
-        robot.drive_for(0.0, 0.0, vyaw, duration=duration)  # the body owns the keep-alive
+        result = turn_by(robot, degrees)
         robot.set_head(head_pitch=-0.1)  # settle, gaze roughly level
         if gesture_pace:
             time.sleep(gesture_pace)
-        side = "left" if degrees > 0 else "right"
+        if result.turned_deg is not None:  # measured by the duck's own heading
+            turned = result.turned_deg
+            did = f"I turned {abs(round(turned))}° to the {'left' if turned > 0 else 'right'}"
+            if abs(turned - degrees) > 10:
+                did += f" (you asked for {abs(int(degrees))}°)"
+        else:
+            did = f"I turned about {abs(int(degrees))}° to the {'left' if degrees > 0 else 'right'}"
         return _camera_result(
-            f"I turned about {abs(int(degrees))}° to the {side} — here's what's "
-            "in front of me now.",
-            f"I turned about {abs(int(degrees))}° to the {side}, but my camera isn't "
-            "available (run the sim with DUCK_SIM_CAMERAS=a).",
+            f"{did} — here's what's in front of me now.",
+            f"{did}, but my camera isn't available (run the sim with DUCK_SIM_CAMERAS=a).",
         )
 
     def _turn_preview(arguments: dict[str, Any]) -> str:
@@ -189,7 +241,14 @@ def build_core_tools(robot: RobotInterface, *, gesture_pace: float = 0.0) -> lis
                 "type": "number",
                 "minimum": -180,
                 "maximum": 180,
-                "description": "Degrees to turn in place; positive = left, negative = right.",
+                "description": (
+                    "Degrees to turn; positive = left, negative = right. The duck turns "
+                    "in a tight arc, stepping a little forward as it goes, and lands "
+                    "within a few degrees of the request. To face something in the "
+                    f"picture: at its left or right edge it is about {round(camera_hfov_deg / 2)}° "
+                    f"away, halfway to the edge about {round(camera_hfov_deg / 4)}° — the "
+                    "camera is narrow, so small turns. Then check the view and correct."
+                ),
             }
         },
         "required": ["degrees"],
@@ -269,7 +328,7 @@ def build_core_tools(robot: RobotInterface, *, gesture_pace: float = 0.0) -> lis
         ),
         FunctionTool(
             "turn",
-            "Turn in place to face a new direction (positive degrees = left, negative = right), "
+            "Turn to face a new direction (positive degrees = left, negative = right), "
             "then report what the duck now sees. Use it to look toward a different wall or object "
             "before walking to it or examining it.",
             Risk.ACTION,

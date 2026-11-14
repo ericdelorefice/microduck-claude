@@ -3,12 +3,13 @@
 from __future__ import annotations
 
 from microduck_claude.assembly import build_roam_registry
+from microduck_claude.brain import LLMResponse
 from microduck_claude.cli import _run_explore
 from microduck_claude.config import Config
 from microduck_claude.robot import FakeRobot
 from microduck_claude.tools import ToolRegistry
 from microduck_claude.voice import PrintTTS
-from tests.fakes import FakeLLM, FakeTTS, llm_text
+from tests.fakes import FakeLLM, FakeTTS, llm_text, llm_tool
 
 
 def test_explore_refuses_rpc_without_opt_in() -> None:
@@ -51,3 +52,21 @@ def test_explore_narrates_each_line_aloud() -> None:
     assert rc == 0
     assert tts.spoken[0] == "That is the Mona Lisa."
     assert len(tts.spoken) == 15  # every round's narration was spoken, not just printed
+
+
+def test_explore_coaxes_narration_when_a_round_is_silent() -> None:
+    # A round that moves but says nothing would be silent in the film (only reply text is heard),
+    # so the loop nudges the duck for a narrator line before moving on. Round 1 acts then falls
+    # silent; the nudge recovers the line. (This is the gap that left the first recording silent.)
+    robot = FakeRobot()
+    config = Config(robot_backend="fake")
+    tts = FakeTTS()
+    responses = [
+        llm_tool("t1", "explore", {}),  # round 1: the duck acts...
+        LLMResponse(),  # ...and says nothing, so the round would be silent
+        llm_text("A wall. The duck is unmoved."),  # drawn out by the nudge
+    ] + [llm_text("Moving on.")] * 14  # rounds 2-15 narrate directly
+    rc = _run_explore(FakeLLM(responses), robot, build_roam_registry(robot), "sys", config, tts=tts)
+    assert rc == 0
+    assert "A wall. The duck is unmoved." in tts.spoken  # the nudge recovered the missing line
+    assert len(tts.spoken) == 15  # one narration per round — none left silent

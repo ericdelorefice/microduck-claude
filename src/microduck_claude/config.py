@@ -25,13 +25,17 @@ class Config:
     memory_path: str = "~/.microduck-claude/memory.json"
     robot_backend: str = "fake"  # "fake" (in-process) | "rpc" (real duck-sim / robot)
     robot_socket: str = DEFAULT_SIM_SOCKET
+    tof_socket: str = ""  # tofd depth stream; empty = beside robot_socket, then /run/tofd
     api_version: int = API_VERSION
-    voice_output: str = "host"  # "host" (Mac say) | "duck" (SSH) | "elevenlabs" (cloud neural)
+    voice_output: str = "host"  # "host" (Mac say) | "duck" (SSH) | "elevenlabs" | "edge" (neural)
     say_voice: str = ""  # macOS 'say' voice (e.g. "Daniel"); empty = auto-pick a working one
     say_rate: int = 0  # macOS 'say' words-per-minute (0 = system default; ~165 reads narrator-ish)
     elevenlabs_voice: str = ""  # ElevenLabs voice id, for voice_output=elevenlabs
     elevenlabs_model: str = "eleven_multilingual_v2"  # ElevenLabs model id
+    edge_voice: str = "en-GB-ThomasNeural"  # edge-tts neural voice, for voice_output=edge
+    edge_rate: str = "-8%"  # edge-tts rate delta; about 140 wpm, the dry-documentary sweet spot
     camera_url: str = "http://127.0.0.1:8080/frame"  # duck camera snapshot endpoint
+    camera_hfov_deg: float = 37.3  # picture width in degrees (alpha IMX219, mounted sideways)
     duck_ssh_host: str = ""
     duck_audio_device: str = "plughw:aic3104"
     duck_ssh_user: str = "microduck"
@@ -61,13 +65,17 @@ class Config:
             memory_path=os.environ.get("MICRODUCK_MEMORY_PATH", "~/.microduck-claude/memory.json"),
             robot_backend=os.environ.get("MICRODUCK_ROBOT_BACKEND", "fake").lower(),
             robot_socket=os.environ.get("MICRODUCK_ROBOT_SOCKET", DEFAULT_SIM_SOCKET),
+            tof_socket=os.environ.get("MICRODUCK_TOF_SOCKET", ""),
             api_version=_int_env("MICRODUCK_API_VERSION", API_VERSION),
             voice_output=os.environ.get("MICRODUCK_VOICE_OUTPUT", "host").lower(),
             say_voice=os.environ.get("MICRODUCK_SAY_VOICE", ""),
             say_rate=_int_env("MICRODUCK_SAY_RATE", 0),
             elevenlabs_voice=os.environ.get("MICRODUCK_ELEVENLABS_VOICE", ""),
             elevenlabs_model=os.environ.get("MICRODUCK_ELEVENLABS_MODEL", "eleven_multilingual_v2"),
+            edge_voice=os.environ.get("MICRODUCK_EDGE_VOICE", "en-GB-ThomasNeural"),
+            edge_rate=os.environ.get("MICRODUCK_EDGE_RATE", "-8%"),
             camera_url=os.environ.get("MICRODUCK_CAMERA_URL", "http://127.0.0.1:8080/frame"),
+            camera_hfov_deg=_float_env("MICRODUCK_CAMERA_HFOV_DEG", 37.3),
             duck_ssh_host=os.environ.get("MICRODUCK_DUCK_SSH_HOST", ""),
             duck_audio_device=os.environ.get("MICRODUCK_DUCK_AUDIO_DEVICE", "plughw:aic3104"),
             duck_ssh_user=os.environ.get("MICRODUCK_DUCK_SSH_USER", "microduck"),
@@ -78,6 +86,17 @@ class Config:
             explore_allow_rpc=os.environ.get("MICRODUCK_EXPLORE_ALLOW_RPC", "").lower()
             in ("1", "true", "yes", "on"),
         )
+
+
+def _float_env(name: str, default: float) -> float:
+    raw = os.environ.get(name)
+    if raw is None or not raw.strip():
+        return default
+    try:
+        value = float(raw)
+    except ValueError:
+        return default
+    return value if 1.0 <= value <= 179.0 else default
 
 
 def _int_env(name: str, default: int) -> int:

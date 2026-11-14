@@ -5,7 +5,11 @@ from typing import Any
 import pytest
 
 from microduck_claude.brain import AnthropicLLM, ToolResult
-from microduck_claude.brain.anthropic_llm import _FRAME_OMITTED, _MAX_IMAGES
+from microduck_claude.brain.anthropic_llm import (
+    _FRAME_OMITTED,
+    _MAX_IMAGES,
+    _THINKING_BINDING_BETA,
+)
 from tests.fakes import FakeAnthropic, refusal_response, text_response, tool_response
 
 
@@ -81,6 +85,7 @@ def test_failed_request_does_not_poison_history() -> None:
 
     client: Any = type("Client", (), {})()
     client.messages = _BoomThenOK()
+    client.beta = type("Beta", (), {"messages": client.messages})()  # adapter calls beta.messages
     llm = AnthropicLLM(client, model="m", max_tokens=10)
     llm.start("S", [])
 
@@ -117,3 +122,15 @@ def test_unanswered_tool_use_is_closed_on_next_user_turn() -> None:
     assert tool_result["tool_use_id"] == "t1"
     assert tool_result["is_error"] is True
     assert text_block == {"type": "text", "text": "next"}
+
+
+def test_thinking_binding_lets_server_drop_pruned_blocks() -> None:
+    """Because _prune_images edits earlier tool_results, the request must carry the binding
+    beta and ask the server to drop (not 400 on) thinking blocks whose prefix changed."""
+    client = FakeAnthropic([text_response("hi")])
+    llm = AnthropicLLM(client, model="m", max_tokens=10)
+    llm.start("S", [])
+    llm.send_user("go")
+    call = client.messages.calls[0]
+    assert call["thinking"]["block_binding"]["prefix_mismatch_behavior"] == "drop_block"
+    assert _THINKING_BINDING_BETA in call["betas"]

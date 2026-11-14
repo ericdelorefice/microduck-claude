@@ -13,6 +13,7 @@ core so the package stays dependency-light and CI needs no audio hardware.
 from __future__ import annotations
 
 import http.client
+import importlib.util
 import json
 import os
 import shutil
@@ -209,5 +210,92 @@ class ElevenLabsTTS:
             # OSError, so without it a truncated reply would crash the voice loop here.
             print(f"(ElevenLabs TTS failed: {exc})", file=sys.stderr)
             return
+        if audio:
+            self._player(audio)
+
+
+# A measured British-narrator voice with strong proper-noun pronunciation: Microsoft's neural
+# voices say "Hokusai", "Salvator Mundi", and "van Gogh" correctly, where a local rule-based
+# phonemizer mangles them. Audio stays an optional extra behind the TextToSpeech interface.
+_EDGE_DEFAULT_VOICE = "en-GB-ThomasNeural"
+_EDGE_DEFAULT_RATE = "-8%"  # ~140 wpm, the dry-documentary sweet spot (vs ~150-180 conversational)
+
+# Speech-only pronunciation fixes: applied to what the narrator SAYS, never to the printed caption.
+# "van Gogh" -> the BBC Pronunciation Unit's British form "van GOF" (edge otherwise leans American).
+_EDGE_LEXICON = {
+    "van Gogh": "van Goff",
+    "Van Gogh": "Van Goff",
+}
+
+
+def _apply_lexicon(text: str) -> str:
+    for term, respelling in _EDGE_LEXICON.items():
+        text = text.replace(term, respelling)
+    return text
+
+
+def _edge_render(text: str, voice: str, rate: str) -> bytes:
+    """Render text to MP3 bytes via the ``edge-tts`` CLI (Microsoft neural voices, no key)."""
+    with tempfile.NamedTemporaryFile(suffix=".mp3", delete=False) as handle:
+        path = handle.name
+    try:
+        subprocess.run(
+            [
+                sys.executable,
+                "-m",
+                "edge_tts",
+                "--voice",
+                voice,
+                f"--rate={rate}",
+                "--text",
+                text,
+                "--write-media",
+                path,
+            ],
+            check=False,
+            capture_output=True,
+            timeout=_AUDIO_TIMEOUT_S,
+        )
+        if os.path.getsize(path):
+            with open(path, "rb") as fh:
+                return fh.read()
+        return b""
+    except (OSError, subprocess.SubprocessError):
+        return b""  # a failed render must not crash the narration loop
+    finally:
+        if os.path.exists(path):
+            os.unlink(path)
+
+
+class EdgeTTS:
+    """Speaks via Microsoft Edge's neural voices through the ``edge-tts`` CLI.
+
+    Free and keyless, but cloud-based: it renders over Microsoft's online endpoint (needs
+    internet) and plays the MP3 with ``afplay``. Chosen for the gallery demo because the neural
+    voices pronounce proper nouns and foreign names (Hokusai, Salvator Mundi, van Gogh) correctly,
+    where a local rule-based phonemizer mangles them. ``renderer`` / ``player`` inject for tests.
+    """
+
+    def __init__(
+        self,
+        voice: str = _EDGE_DEFAULT_VOICE,
+        *,
+        rate: str = _EDGE_DEFAULT_RATE,
+        renderer: Callable[[str, str, str], bytes] | None = None,
+        player: Player | None = None,
+    ) -> None:
+        self._voice = voice
+        self._rate = rate
+        self._render = renderer if renderer is not None else _edge_render
+        self._player = player if player is not None else _afplay
+
+    @staticmethod
+    def available() -> bool:
+        if shutil.which("afplay") is None:
+            return False
+        return importlib.util.find_spec("edge_tts") is not None
+
+    def speak(self, text: str) -> None:
+        audio = self._render(_apply_lexicon(text), self._voice, self._rate)
         if audio:
             self._player(audio)

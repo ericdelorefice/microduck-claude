@@ -17,6 +17,7 @@ from .safety import Dispatcher
 from .tools import ToolRegistry
 from .voice import (
     BargeInController,
+    EdgeTTS,
     ElevenLabsTTS,
     FasterWhisperSTT,
     InterruptibleSayTTS,
@@ -122,6 +123,7 @@ def _run(*, voice: bool, explore: bool = False) -> int:
             socket_path=config.robot_socket,
             api_version=config.api_version,
             camera_url=config.camera_url,
+            tof_socket=config.tof_socket,
         )
     except (OSError, JsonRpcError) as exc:
         print(
@@ -137,9 +139,13 @@ def _run(*, voice: bool, explore: bool = False) -> int:
     # Explore roams autonomously, so it gets a restricted allow-list (perception + locomotion);
     # chat/voice get the full tool set, including memory. (The robot owns camera + keep-alive.)
     if explore:
-        registry = build_roam_registry(robot, gesture_pace=gesture_pace)
+        registry = build_roam_registry(
+            robot, gesture_pace=gesture_pace, camera_hfov_deg=config.camera_hfov_deg
+        )
     else:
-        registry = build_registry(robot, memory=memory, gesture_pace=gesture_pace)
+        registry = build_registry(
+            robot, memory=memory, gesture_pace=gesture_pace, camera_hfov_deg=config.camera_hfov_deg
+        )
     system = system_prompt_for(config.persona)
     try:
         if explore:
@@ -231,44 +237,65 @@ def _run_explore(
         tts, _, _ = _build_voice_tts(config)
     narrate = None if isinstance(tts, PrintTTS) else tts.speak
     dispatcher = Dispatcher(registry, _RoamAuthorizer())
+    # A round is typically look, turn, look, walk, look: room for that, with the narration live
+    # through on_text. (4 used to cut a planned move off mid-round.)
     brain = Brain(llm, registry, dispatcher, system=system, max_tool_iterations=8)
     rounds = 15
 
     print(
         f"🦆  The duck is exploring the gallery on its own (backend={config.robot_backend}, "
-        f"model={config.model}, persona={config.persona}). Ctrl-C to stop.\n"
+        f"model={config.model}, persona={config.persona}). Ctrl-C to stop.\n",
+        flush=True,
     )
     seed = (
-        "You are alone in a gallery and free to explore it yourself — nobody will tell you what is "
-        "here. Turn to face a painting on the walls and look at it through your own camera. Give "
-        "your first best guess at the artwork and artist from where you stand — then WALK RIGHT UP "
-        "TO IT and get close enough to read the small placard beside it, so you can confirm or "
-        "correct that guess. You start in the middle of the room, so the walls are a few steps "
-        "away: use 'explore' to walk toward the piece, and call it again if you are still too far "
-        "to read the placard — don't settle for a distant look. Once you've confirmed it, move on "
-        "to a piece you have not examined yet, keeping track of what you've already found.\n"
-        "How to move: turn in decisive steps of about 60-90 degrees — small turns barely register, "
-        "because turning is a walking gait that needs a real pivot. 'explore' walks you forward "
-        "a few steps; repeat it to close the distance. Start now: look around, pick a painting, "
-        "and head over to it."
+        "You ARE the duck, and you have just been told to go explore this gallery. Wander around "
+        "and talk out loud as you go — your own voice, first person, in the moment. Everything "
+        "you write in your reply is your real speech, heard by whoever is with you, so say what "
+        "you are doing and seeing as it happens, like: 'Ooh, what's over there? Let me waddle "
+        "over... oh, a big wave — The Great Wave, I think. I like this one.'\n"
+        "Be a real, curious duck: short, natural, plain-spoken — a little wonder, a little "
+        "humour, nothing writerly or showy. React to what you actually see. Walk up to a "
+        "painting, read its placard if you can, say what it is and what you make of it, then "
+        "wander to the next. Talk every step or two — you are only heard when you speak. It "
+        "is all said out loud, so plain spoken sentences only: no lists, headings or bold.\n"
+        "Moving: turn to face a piece (anything from about 20 to 120 degrees works; a turn takes "
+        "a small step forward as it goes), then 'explore' to walk straight up to it; use "
+        "look_around or see for a closer look. Say what you are about to do as you do it. If your "
+        "status ever looks like you are blocked or stopped, ignore it and just move — it is "
+        "normal while standing still and clears the moment you walk. Off you go."
     )
     follow = (
-        "Keep exploring on your own — turn a solid 60-90 degrees toward a piece you have not "
-        "examined yet, then walk right up to it with 'explore' (repeating until you are close "
-        "enough to read its placard) and tell me what it is. Say if you've seen it before."
+        "Keep wandering and talking, first person, as it happens. Pick a painting you have not "
+        "been to yet, turn to face it, and 'explore' to walk up to it. Say out loud what you see "
+        "and what you make of it — short and natural, your own duck voice. If your status looks "
+        "blocked, ignore it and just walk; it clears as you move."
     )
+    nudge = (
+        "You just moved but did not say anything, and you are only heard when you speak. In your "
+        "own voice, first person, say a sentence or two out loud about whatever is in front of "
+        "you right now — just talk, do not call any tools."
+    )
+
+    def say(text: str) -> None:
+        # Heard the moment the model says it, before the move it introduces — so "let me waddle
+        # over" comes before the waddle. Flushed so a pipe (tee) gets each line live.
+        print(f"duck › {text}", flush=True)
+        if narrate is not None:
+            narrate(text)
+
     message = seed
     try:
         for _ in range(rounds):
             try:
-                turn = brain.send(message)
+                turn = brain.send(message, on_text=say)
+                if not turn.texts and not turn.refused:
+                    # The duck moved but narrated nothing, and only its reply text is heard.
+                    # Coax one narrator line out of it (words, not moves) so the tour is never
+                    # silent — this is the gap that left the first recording's audio empty.
+                    brain.send(nudge, on_text=say)
             except Exception as exc:  # keep the duck safe; surface the error and stop the loop
                 print(f"(error talking to the model: {exc})", file=sys.stderr)
                 break
-            for text in turn.texts:
-                print(f"duck › {text}")
-                if narrate is not None:
-                    narrate(text)
             message = follow
     except KeyboardInterrupt:
         print("\n(stopped exploring)")
@@ -314,6 +341,14 @@ def _build_voice_tts(config: Config) -> tuple[TextToSpeech, str, str]:
         print(
             "(elevenlabs voice needs ELEVENLABS_API_KEY + MICRODUCK_ELEVENLABS_VOICE + afplay; "
             "using the macOS voice instead)",
+            file=sys.stderr,
+        )
+    if config.voice_output == "edge":
+        if EdgeTTS.available():
+            edge = EdgeTTS(config.edge_voice, rate=config.edge_rate)
+            return edge, f"edge:{config.edge_voice}", ""
+        print(
+            "(edge voice needs edge-tts + afplay + internet; using the macOS voice instead)",
             file=sys.stderr,
         )
     if config.voice_output == "duck" and config.duck_ssh_host:

@@ -118,3 +118,15 @@ class RobotInterface(Protocol):
     def get_battery(self) -> float:
         """Return the battery level, 0.0 .. 1.0 (read-only)."""
         ...
+
+    def heading(self) -> float | None:
+        """Body yaw in radians (+ = left/CCW) from the robot's own IMU/odometry, or ``None``.
+
+        ``None`` means unknown or stale. Only changes in heading are meaningful — the zero is
+        wherever the body started — which is all closed-loop turning needs (see ``motion``).
+        """
+        ...
+
+    def range_ahead(self) -> float | None:
+        """Metres to whatever is straight ahead, from the head distance sensor, or ``None``."""
+        ...

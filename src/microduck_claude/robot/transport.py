@@ -17,6 +17,7 @@ import json
 import logging
 import socket
 import threading
+import time
 from collections import deque
 from dataclasses import dataclass
 from types import TracebackType
@@ -63,6 +64,8 @@ class UnixSocketTransport:
         self._next_id = 0
         self._notifications: deque[dict[str, Any]] = deque(maxlen=256)
         self._latest_state: dict[str, Any] | None = None
+        # The newest params of each notification method, with when it arrived (monotonic).
+        self._latest: dict[str, tuple[dict[str, Any], float]] = {}
         self._reader: threading.Thread | None = None
         self._closed = threading.Event()
 
@@ -148,6 +151,14 @@ class UnixSocketTransport:
         state = self._latest_state
         return dict(state) if state is not None else None
 
+    def latest(self, method: str) -> tuple[dict[str, Any], float] | None:
+        """The newest params of a notification ``method`` and its age in seconds, if any."""
+        entry = self._latest.get(method)
+        if entry is None:
+            return None
+        params, at = entry
+        return params, time.monotonic() - at
+
     # -- internals -------------------------------------------------------------
 
     def _send(self, payload: dict[str, Any]) -> None:
@@ -206,9 +217,11 @@ class UnixSocketTransport:
         pending.event.set()
 
     def _handle_notification(self, message: dict[str, Any]) -> None:
-        if message.get("method") == ROBOT_STATE:
-            params = message.get("params")
-            if isinstance(params, dict):
+        method = message.get("method")
+        params = message.get("params")
+        if isinstance(method, str) and isinstance(params, dict):
+            self._latest[method] = (params, time.monotonic())
+            if method == ROBOT_STATE:
                 self._latest_state = params
         self._notifications.append(message)
 
