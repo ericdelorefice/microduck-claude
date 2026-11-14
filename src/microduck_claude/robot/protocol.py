@@ -34,6 +34,11 @@ ROBOT_RELAX = "robot.relax"  # cut torque -> IntentResult
 # Inbound notifications (received, not sent).
 ROBOT_STATE = "robot.state"  # {t, move, head, joints, imu, ...}; battery is NOT here
 
+# The head ToF sensor, served by tofd on its own socket (robotd is not in the path).
+TOF_STREAM = "tof.stream"  # (no params) -> {accepted, rows, cols, hz, sensor}; then tof.frame
+TOF_FRAME = "tof.frame"  # {seq, rows, cols, distance_mm[rows*cols], status[rows*cols]}
+TOF_ROBOT_SOCKET = "/run/tofd/tof.sock"  # on the robot; the sim's sits beside its robot socket
+
 # Local duck-sim control socket. scripts/duck-sim binds ~/.cache/duck-sim/duck-a.sock
 # (with a convenience symlink ~/.cache/duck-sim/duck.sock -> it). Override with the
 # MICRODUCK_ROBOT_SOCKET environment variable.

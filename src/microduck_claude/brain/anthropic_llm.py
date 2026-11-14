@@ -22,6 +22,14 @@ _MAX_IMAGES = 3
 _FRAME_OMITTED = "[an earlier camera frame was omitted to keep the request small]"
 _FRAME_NOT_RESENT = "[the camera frame from this call could not be resent]"
 
+# Pruning stale frames (``_prune_images``) rewrites earlier tool_results, which changes the
+# content *before* later thinking blocks and so invalidates their signature under the API's
+# preserved-thinking prefix check (enforced by default on accounts created on/after 2026-08-31).
+# This beta lets us set the thinking block's ``prefix_mismatch_behavior`` to "drop_block", so the
+# server drops exactly those now-invalid blocks and proceeds instead of rejecting the whole
+# request with a 400. See the Claude "Thinking" docs → "Preserved thinking".
+_THINKING_BINDING_BETA = "thinking-binding-controls-2026-08-01"
+
 
 def _image_media_type(data: bytes) -> str:
     """Sniff an image's media type from its magic bytes (default PNG).
@@ -180,13 +188,20 @@ class AnthropicLLM:
         return block
 
     def _complete(self) -> LLMResponse:
-        response = self._client.messages.create(
+        response = self._client.beta.messages.create(
             model=self._model,
             max_tokens=self._max_tokens,
             system=self._system,
             tools=self._tools,
-            thinking={"type": "adaptive"},
+            # "drop_block" (needs the beta below) lets the server drop any thinking block whose
+            # prefix our image-pruning changed, instead of 400-ing the request. See the module
+            # note on _THINKING_BINDING_BETA.
+            thinking={
+                "type": "adaptive",
+                "block_binding": {"prefix_mismatch_behavior": "drop_block"},
+            },
             messages=self._messages,
+            betas=[_THINKING_BINDING_BETA],
         )
         # Preserve the assistant content verbatim (keeps thinking + tool_use blocks
         # intact for the next request).

@@ -44,6 +44,10 @@ class FakeRobot:
         self._pose: dict[str, float] = {"z": 0.0, "roll": 0.0, "pitch": 0.0}
         self._active = True
         self._driving = False
+        # No sensors by default, so motion falls back to single timed moves (one recorded
+        # intent each). Tests can set these to exercise what a body with sensors reports.
+        self.heading_rad: float | None = None
+        self.range_m: float | None = None
 
     def _record(self, method: str, **kwargs: object) -> None:
         call = RobotCall(method=method, kwargs=dict(kwargs))
@@ -140,3 +144,9 @@ class FakeRobot:
 
     def get_battery(self) -> float:
         return self._battery
+
+    def heading(self) -> float | None:
+        return self.heading_rad
+
+    def range_ahead(self) -> float | None:
+        return self.range_m

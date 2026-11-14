@@ -99,18 +99,27 @@ safety-architecture deep dive (very saveable for engineers).
 > teleoperation, no script.
 >
 > The duck is Pollen Robotics × Hugging Face's Microduck, running in a MuJoCo simulation. The *brain*
-> is real and live: Claude sees through the onboard camera, decides where to walk and look, identifies
-> the paintings itself (Mona Lisa, Salvator Mundi, Starry Night…), and narrates.
+> is real and live: it sees through the onboard camera, decides where to walk and look, identifies the
+> paintings itself (Mona Lisa, Salvator Mundi, Starry Night…), and narrates.
 >
-> The physical robot is ~3 months out — so this is a showcase of the software/brain, not a hardware
-> flex. I'd rather show you the real decision loop in sim than a staged clip of hardware.
+> I built it around Claude because that's what I use — but the brain is model-agnostic: one
+> provider-neutral seam, so you can point it at any LLM without touching the robot code.
 >
-> It's open-source and safety-first by design: tools are allow-listed, read-only by default, and any
+> The physical robot is ~3 months out, so this is a showcase of the brain, not a hardware flex. I'd
+> rather show you the real decision loop in sim than a staged clip of hardware.
+>
+> Open-source and safety-first by design: tools are allow-listed, read-only by default, and any
 > real-world action needs explicit authorization — anything the duck "hears" or "reads" is treated as
 > untrusted, never a command.
 >
+> Credit where it's due: Pollen Robotics & Hugging Face for the Microduck, and the Open Duck Mini /
+> duck-brain community for the open-source duck it grows from. I added the voice and the LLM.
+>
 > Repo in the comments. Genuine question for the robotics folks: where's the line on letting an LLM be
 > the decision-maker in an embodied system? 👇
+>
+> *Unofficial — a personal project, not affiliated with or endorsed by any employer, Anthropic, Pollen
+> Robotics, or Hugging Face.*
 >
 > #Robotics #OpenSource #LLM #EmbodiedAI #HuggingFace
 

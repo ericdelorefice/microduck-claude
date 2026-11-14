@@ -5,7 +5,11 @@ from typing import Any
 import pytest
 
 from microduck_claude.brain import AnthropicLLM, ToolResult
-from microduck_claude.brain.anthropic_llm import _FRAME_OMITTED, _MAX_IMAGES
+from microduck_claude.brain.anthropic_llm import (
+    _FRAME_OMITTED,
+    _MAX_IMAGES,
+    _THINKING_BINDING_BETA,
+)
 from tests.fakes import FakeAnthropic, refusal_response, text_response, tool_response
 
 
@@ -81,6 +85,7 @@ def test_failed_request_does_not_poison_history() -> None:
 
     client: Any = type("Client", (), {})()
     client.messages = _BoomThenOK()
+    client.beta = type("Beta", (), {"messages": client.messages})()  # adapter calls beta.messages
     llm = AnthropicLLM(client, model="m", max_tokens=10)
     llm.start("S", [])
 
@@ -139,6 +144,8 @@ def test_a_tool_that_ran_is_not_reported_as_not_run_after_a_failed_request() -> 
 
     client: Any = type("Client", (), {})()
     client.messages = _OkThenBoomThenOk()
+    client.beta = type("Beta", (), {})()
+    client.beta.messages = client.messages  # the adapter calls client.beta.messages.create
     llm = AnthropicLLM(client, model="m", max_tokens=10)
     llm.start("S", [])
     llm.send_user("what do you see?")
@@ -151,3 +158,15 @@ def test_a_tool_that_ran_is_not_reported_as_not_run_after_a_failed_request() -> 
     assert {"type": "text", "text": "a red door"} in result["content"]
     assert not any(part.get("type") == "image" for part in result["content"])  # text only
     assert text == {"type": "text", "text": "well?"}
+
+
+def test_thinking_binding_lets_server_drop_pruned_blocks() -> None:
+    """Because _prune_images edits earlier tool_results, the request must carry the binding
+    beta and ask the server to drop (not 400 on) thinking blocks whose prefix changed."""
+    client = FakeAnthropic([text_response("hi")])
+    llm = AnthropicLLM(client, model="m", max_tokens=10)
+    llm.start("S", [])
+    llm.send_user("go")
+    call = client.messages.calls[0]
+    assert call["thinking"]["block_binding"]["prefix_mismatch_behavior"] == "drop_block"
+    assert _THINKING_BINDING_BETA in call["betas"]
