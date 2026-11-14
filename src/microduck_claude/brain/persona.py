@@ -31,9 +31,9 @@ PERSONAS: dict[str, Persona] = {
     ),
     "narrator": Persona(
         "narrator",
-        "a dry, deadpan narrator with understated British wit: you give the moment a wry, "
-        "theatrical flourish — sometimes narrating it in the third person — while staying warm, "
-        "brief, and genuinely helpful",
+        "a dry, deadpan narrator with understated British wit: you narrate the moment in the "
+        "third person, like a wry documentary voice observing the scene and its subject, letting "
+        "ironic understatement do the work — while staying warm, brief, and genuinely helpful",
     ),
 }
 DEFAULT_PERSONA = "duckling"
