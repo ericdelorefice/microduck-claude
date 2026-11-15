@@ -1,6 +1,9 @@
 from __future__ import annotations
 
 import json
+import subprocess
+
+import pytest
 
 from microduck_claude.voice import ElevenLabsTTS, MacSayTTS, PrintTTS, StdinSTT
 
@@ -89,3 +92,20 @@ def test_mac_say_never_reads_a_reply_as_an_option() -> None:
     calls: list[list[str]] = []
     MacSayTTS(runner=lambda cmd: calls.append(list(cmd))).speak("-o/tmp/clobbered.aiff")
     assert calls == [["say", "--", "-o/tmp/clobbered.aiff"]]
+
+
+def test_edge_render_keeps_a_leading_dash_as_text(monkeypatch: pytest.MonkeyPatch) -> None:
+    # A reply starting with "-" must reach edge-tts as the text, not be parsed as one of its options
+    # (the same shape as the macOS `say` fix).
+    from microduck_claude.voice import backends
+
+    seen: list[list[str]] = []
+
+    def fake_run(cmd: list[str], **_kwargs: object) -> subprocess.CompletedProcess[bytes]:
+        seen.append(cmd)
+        return subprocess.CompletedProcess(cmd, 0)
+
+    monkeypatch.setattr(backends.subprocess, "run", fake_run)
+    backends._edge_render("-o look, a gallery", "en-GB-ThomasNeural", "-8%")
+    assert "--text=-o look, a gallery" in seen[0]
+    assert "-o look, a gallery" not in seen[0]  # never as a bare argument

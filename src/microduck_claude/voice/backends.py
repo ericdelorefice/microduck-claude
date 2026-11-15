@@ -247,8 +247,7 @@ def _edge_render(text: str, voice: str, rate: str) -> bytes:
                 "--voice",
                 voice,
                 f"--rate={rate}",
-                "--text",
-                text,
+                f"--text={text}",  # attached, so a line starting with "-" isn't read as an option
                 "--write-media",
                 path,
             ],
