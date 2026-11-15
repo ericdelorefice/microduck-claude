@@ -111,7 +111,8 @@ class Dispatcher:
                 try:
                     if confirm_when(arguments):
                         always = True
-                except Exception:
+                except Exception as exc:
+                    log.warning("confirm_when for tool %r raised %s", name, exc.__class__.__name__)
                     always = True
             if self._trust and not always:
                 auto_approved = True
