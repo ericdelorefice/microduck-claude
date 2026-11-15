@@ -1,5 +1,9 @@
 from __future__ import annotations
 
+import logging
+
+import pytest
+
 from microduck_claude.assembly import build_registry
 from microduck_claude.robot import FakeRobot
 from microduck_claude.safety import CallbackConfirmer, Dispatcher, Outcome
@@ -124,6 +128,33 @@ def test_confirm_when_error_requires_confirmation() -> None:
     result = dispatcher.dispatch("act", {})
     assert result.outcome is Outcome.DECLINED_BY_USER  # fail-safe: a broken predicate → confirm
     assert confirmer.prompts
+
+
+def test_confirm_when_error_is_logged(caplog: pytest.LogCaptureFixture) -> None:
+    # The fail-safe above is silent otherwise: a broken predicate would just look like a
+    # tool that always asks. Say which tool and what went wrong.
+    def boom(_a: dict[str, object]) -> bool:
+        raise RuntimeError("predicate blew up")
+
+    registry = ToolRegistry()
+    registry.register(
+        FunctionTool(
+            "act",
+            "desc",
+            Risk.ACTION,
+            _EMPTY_SCHEMA,
+            lambda _a: ToolResult("did it"),
+            confirm_when=boom,
+        )
+    )
+    confirmer = RecordingConfirmer(answer=False)
+    dispatcher = Dispatcher(registry, confirmer, trust=True)
+    with caplog.at_level(logging.WARNING, logger="microduck_claude.safety"):
+        result = dispatcher.dispatch("act", {})
+    assert result.outcome is Outcome.DECLINED_BY_USER  # still confirmed, even in trust mode
+    assert confirmer.prompts
+    warnings = [r.getMessage() for r in caplog.records if r.levelno == logging.WARNING]
+    assert any("'act'" in m and "RuntimeError" in m for m in warnings), warnings
 
 
 def test_locomotion_tools_are_confirm_always() -> None:
